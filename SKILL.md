@@ -65,16 +65,20 @@ Response:
 ```
 
 ### Generate AND save to disk (what you usually want in an agent)
+Two steps — generate, then `curl` the URL down. **Download with `curl`, not bare
+`python urllib`**: `media.aipg.art` (Cloudflare) 403s the default `Python-urllib`
+User-Agent (see Gotchas).
 ```bash
-curl -s -X POST "$GRID_BASE_URL/v1/images/generations" \
+RESP=$(curl -s -X POST "$GRID_BASE_URL/v1/images/generations" \
   -H "apikey: $GRID_API_KEY" -H "Content-Type: application/json" \
-  -d '{"model":"Krea 2 Turbo","prompt":"a friendly robot mascot, flat vector logo","size":"1024x1024"}' \
-| python3 -c 'import sys,json,urllib.request as u; d=json.load(sys.stdin)["data"];
-[ (u.urlretrieve(x["url"], f"grid_{i}.webp"), print(f"saved grid_{i}.webp  seed={x[\"seed\"]}")) for i,x in enumerate(d) ]'
+  -d '{"model":"Krea 2 Turbo","prompt":"a friendly robot mascot, flat vector logo","size":"1024x1024"}')
+URL=$(printf '%s' "$RESP" | python3 -c 'import sys,json;print(json.load(sys.stdin)["data"][0]["url"])')
+curl -s -o grid.webp "$URL" && echo "saved grid.webp  ($URL)"
 ```
 
-### Get bytes back directly (no second request)
-Add `"response_format":"b64_json"` — each `data[i].b64_json` is the base64 image.
+### Get bytes back directly (no second request, no download gotcha)
+Add `"response_format":"b64_json"` — each `data[i].b64_json` is the base64 image,
+inline in the response. No media fetch at all.
 ```bash
 curl -s -X POST "$GRID_BASE_URL/v1/images/generations" \
   -H "apikey: $GRID_API_KEY" -H "Content-Type: application/json" \
@@ -229,6 +233,10 @@ curl -s "$GRID_BASE_URL/v1/stats/totals" -H "apikey: $GRID_API_KEY"
   `"FLUX.2 Klein 4B FP8"`). Verify current names with `/v1/status/models`.
 - **Media URLs** point at `media.aipg.art`; download promptly if you need to keep
   the asset. Default image format is `webp` (override with `output_format`).
+- **Downloading media: use `curl`** (or set a `User-Agent`). `media.aipg.art` is
+  Cloudflare-fronted and returns **403** to the default `Python-urllib` agent.
+  `curl -o file "$URL"` works; `urllib.request.urlretrieve(url)` does not unless you
+  add a `User-Agent` header. Or avoid the fetch with `response_format:"b64_json"`.
 - **Out-of-range params → `422`**, not a silent clamp. Read the error; it tells you
   the allowed band.
 - **Free tier** has a small daily cap (see `/v1/account/credits`); beyond it you
