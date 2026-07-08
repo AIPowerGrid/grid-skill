@@ -1,0 +1,6 @@
+.DS_Store
+*.webp
+*.png
+*.mp4
+grid_*.webp
+out.*
