@@ -13,7 +13,8 @@ verified against the live API.
 
 ## What it covers
 
-- Image generation (basic, save-to-disk, b64, all params, styles, img2img, LoRAs)
+- Image generation (basic, save-to-disk, b64, parameters, styles, img2img, and
+  the current LoRA limitation)
 - Video generation (sync + live progress polling, img2video)
 - Chat / LLM completions (streaming + non-streaming; Anthropic & Responses shims)
 - Models, styles, workers, live per-model performance, grid totals
@@ -21,7 +22,11 @@ verified against the live API.
 
 ## Use it
 
-First, set your key (get one from console.aipowergrid.io → API Keys):
+First, set your key. Open the
+[authenticated API-key handoff](https://console.aipowergrid.io/?callbackUrl=%2Fdashboard%2Fapi-key),
+sign in with Google, GitHub, or a wallet, and create one. Keep the key in an
+environment variable or local secret store; do not paste it into an agent chat.
+
 ```bash
 export GRID_API_KEY="grid_…"
 export GRID_BASE_URL="https://api.aipowergrid.io"

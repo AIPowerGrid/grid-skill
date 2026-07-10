@@ -4,17 +4,22 @@ description: >-
   Generate images and video, run LLM chat completions, and query models,
   workers, and credits on the AI Power Grid (api.aipowergrid.io) — an
   OpenAI-compatible decentralized inference API. Use whenever the user wants to
-  create an image or video, call a chat/LLM model, or inspect grid status. Every
-  action is a single HTTP call; snippets below are copy-paste ready.
+  create an image or video, call a chat/LLM model, or inspect grid status. Core
+  generation calls are synchronous HTTP requests; optional progress polling and
+  media downloads use follow-up calls. Snippets below are copy-paste ready.
 ---
 
 # AI Power Grid — agent skill
 
 The grid is an **OpenAI-compatible** API for decentralized image, video, and text
-generation. If you know the OpenAI API, you know this — with two differences:
+generation. If you know the OpenAI API, you know this. Authentication accepts:
 
-1. **Auth header is `apikey:`**, not `Authorization: Bearer`.
-2. **Base URL** is `https://api.aipowergrid.io`.
+1. Grid-native `apikey: <key>` (used in the curl examples below).
+2. OpenAI-compatible `Authorization: Bearer <key>`; Anthropic Messages also
+   accepts `x-api-key: <key>`.
+
+The API origin is `https://api.aipowergrid.io`; OpenAI SDKs use
+`https://api.aipowergrid.io/v1` as their base URL.
 
 ## Setup
 
@@ -23,8 +28,19 @@ export GRID_API_KEY="grid_…"                     # your key
 export GRID_BASE_URL="https://api.aipowergrid.io"
 ```
 
-All snippets read those two env vars. Get a key from the developer console
-(console.aipowergrid.io → API Keys) or ask the grid operator.
+All snippets read those two env vars. A durable key belongs to a
+human-authenticated Grid account. If no key is configured:
+
+1. Give the human this link:
+   `https://console.aipowergrid.io/?callbackUrl=%2Fdashboard%2Fapi-key`.
+2. Ask them to sign in with Google, GitHub, or a wallet. The callback opens the
+   API Keys page, where they create the key.
+3. Ask them to store the key in their local secret store or `GRID_API_KEY`
+   environment variable. Do not ask them to paste it into chat.
+
+Do not invent, scrape, or request an anonymous key. The planned agent-connect
+device flow is not live yet; until it ships, console authentication is the
+supported handoff.
 
 ## Endpoint map
 
@@ -103,7 +119,7 @@ open("out.png","wb").write(base64.b64decode(d["b64_json"])); print("wrote out.pn
   "response_format": "url",                  // url | b64_json
   "style": "3d-render",                      // curated preset (see Styles); expands server-side
   "image": "data:image/png;base64,…",        // img2img / edit source (see below)
-  "loras": [ … ],                            // CivitAI LoRAs (see below)
+  "loras": [ … ],                            // known limitation; see below
   "worker": "half5090beast1"                 // soft-prefer a worker you own
 }
 ```
@@ -120,11 +136,13 @@ curl -s -X POST "$GRID_BASE_URL/v1/images/generations" \
   -d "{\"model\":\"FLUX.2 Klein 4B FP8\",\"prompt\":\"make it snowy\",\"image\":\"$IMG\"}"
 ```
 
-### LoRAs (CivitAI passthrough)
-```jsonc
-"loras": [{"name":"add-detail","model":0.8,"clip":0.8,"is_version":false,"inject_trigger":true}]
-```
-Rejected (not ignored) if the model has no LoRA injection point.
+### LoRAs (not ready on the recipe executor)
+
+Do not send `loras` for current resolved-recipe jobs. Core validates the field
+and can advertise an injection point, but the media worker's recipe executor
+does not yet splice the LoRA loader and warns instead. Treat this as unsupported
+until the worker implementation and end-to-end tests land; accepting a request
+without applying it would be misleading.
 
 ---
 
@@ -210,9 +228,10 @@ Also available (drop-in for their SDKs): **Anthropic Messages** at
 ## Account, credits, grid status
 
 ```bash
-# Your balance + free daily allowance (USD-denominated, micro-USD under the hood)
+# Your paid balance and any displayed free allowance (USD-denominated)
 curl -s "$GRID_BASE_URL/v1/account/credits" -H "apikey: $GRID_API_KEY"
-#  → {"free":{"daily_cap_usd":0.25,"remaining_usd":0.25,"resets":"utc-midnight"}, "paid":{"balance_usd":…}}
+#  → {"free":{"remaining_usd":…,"active":false},"paid":{"balance_usd":…},
+#      "total_spendable_usd":…}
 
 # Online workers and what each serves
 curl -s "$GRID_BASE_URL/v1/workers" -H "apikey: $GRID_API_KEY"
@@ -228,7 +247,9 @@ curl -s "$GRID_BASE_URL/v1/stats/totals" -H "apikey: $GRID_API_KEY"
 
 ## Gotchas
 
-- **Header:** `apikey: <key>` — not `Authorization: Bearer`. This is the #1 mistake.
+- **Headers:** curl examples use `apikey: <key>`, while OpenAI SDKs naturally
+  send `Authorization: Bearer <key>`; both are supported. Anthropic SDKs may use
+  `x-api-key` on `/v1/messages`.
 - **Model names are exact strings**, spaces and caps included (`"Krea 2 Turbo"`,
   `"FLUX.2 Klein 4B FP8"`). Verify current names with `/v1/status/models`.
 - **Media URLs** point at `media.aipg.art`; download promptly if you need to keep
@@ -239,7 +260,9 @@ curl -s "$GRID_BASE_URL/v1/stats/totals" -H "apikey: $GRID_API_KEY"
   add a `User-Agent` header. Or avoid the fetch with `response_format:"b64_json"`.
 - **Out-of-range params → `422`**, not a silent clamp. Read the error; it tells you
   the allowed band.
-- **Free tier** has a small daily cap (see `/v1/account/credits`); beyond it you
-  need paid balance. A `402` means out of credits.
+- **Free allowance:** inspect `free.active` and `total_spendable_usd` from
+  `/v1/account/credits`. When `free.active` is false, the displayed allowance is
+  preview-only and only paid balance is spendable. A `402` means the request
+  could not reserve enough spendable credit.
 - **Video takes real time.** Use `progress_token` + `/v1/progress/{token}` rather
   than a long blocking curl in an interactive agent.
