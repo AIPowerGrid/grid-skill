@@ -16,6 +16,7 @@ verified against the live API.
 - Image generation (basic, save-to-disk, b64, parameters, styles, img2img, and
   the current LoRA limitation)
 - Video generation (sync + live progress polling, img2video)
+- 3D mesh generation (image→GLB via TRELLIS)
 - Chat / LLM completions (streaming + non-streaming; Anthropic & Responses shims)
 - Models, styles, workers, live per-model performance, grid totals
 - Account credits / usage

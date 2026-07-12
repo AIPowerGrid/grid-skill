@@ -49,6 +49,7 @@ supported handoff.
 |---------|------|
 | Generate an image | `POST /v1/images/generations` |
 | Generate a video | `POST /v1/videos/generations` |
+| Generate a 3D mesh (image→GLB) | `POST /v1/3d/generations` |
 | Chat / LLM completion | `POST /v1/chat/completions` |
 | List text models | `GET /v1/models` |
 | List image/video models + live perf | `GET /v1/status/models` |
@@ -61,6 +62,7 @@ supported handoff.
 Current model names (change over time — verify with `/v1/status/models`):
 - **Image:** `Krea 2 Turbo` (fast ~8s), `z-image-turbo`, `FLUX.2 Klein 4B FP8`
 - **Video:** `LTX-2.3`
+- **3D:** `TRELLIS2` (image→mesh)
 - **Text:** `auto` (router), `gpt-oss-120b`, `gpt-oss-20b`, `deepseek-v4-flash-nvfp4`
 
 ---
@@ -196,6 +198,41 @@ Video params: `seconds` (1–10), `fps` (8–30), `size` (default `768x512`),
 
 ### img2video
 Pass a start frame as `image` (base64 / `data:` URI), same as img2img.
+
+---
+
+## 3D (image → mesh)
+
+`POST /v1/3d/generations` turns a **single image** into a textured 3D mesh (**GLB**)
+via TRELLIS. There is **no prompt** — it's image-conditioned only. It's **slow**
+(~100s+) and GPU-heavy, so prefer `progress_token` polling for a UI.
+
+```bash
+IMG="data:image/png;base64,$(base64 -i photo.png)"
+curl -s --max-time 300 -X POST "$GRID_BASE_URL/v1/3d/generations" \
+  -H "apikey: $GRID_API_KEY" -H "Content-Type: application/json" \
+  -d "{\"model\":\"TRELLIS2\",\"image\":\"$IMG\"}"
+# → {"data":[{"url":"https://media.aipg.art/.../0.glb","seed":…}],
+#    "grid":{"worker":"gorgadon-trellis","gen_time":101,"model":"TRELLIS2"}}
+```
+
+Download + view the mesh:
+```bash
+curl -s -o out.glb "$URL"   # open in Blender, https://gltf-viewer.donmccurdy.com, or <model-viewer>
+```
+
+Params (all optional except `image`):
+| param | notes |
+|-------|-------|
+| `image` | **required** — source image (base64 / `data:` URI). No prompt. |
+| `steps` | 4–30 — shape sampling steps (default 12) |
+| `guidance` | 1–10 — classifier-free guidance (default ~6.5) |
+| `target_faces` | 5000–300000 — mesh decimation target |
+| `seed` | omit for random; folded into TRELLIS's range, echoed back |
+| `progress_token` | poll `GET /v1/progress/{token}` — **use this**, don't block for 100s |
+
+Output is a `.glb` (glTF binary) on `media.aipg.art`. Out-of-range knobs return
+`422` (not silently clamped), same as image/video.
 
 ---
 
