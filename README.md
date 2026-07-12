@@ -26,6 +26,8 @@ First, set your key. Open the
 [authenticated API-key handoff](https://console.aipowergrid.io/?callbackUrl=%2Fdashboard%2Fapi-key),
 sign in with Google, GitHub, or a wallet, and create one. Keep the key in an
 environment variable or local secret store; do not paste it into an agent chat.
+Google and a proved wallet can share one canonical account and its promotional,
+daily-free, and purchased credit pockets.
 
 ```bash
 export GRID_API_KEY="grid_…"

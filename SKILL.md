@@ -28,8 +28,9 @@ export GRID_API_KEY="grid_…"                     # your key
 export GRID_BASE_URL="https://api.aipowergrid.io"
 ```
 
-All snippets read those two env vars. A durable key belongs to a
-human-authenticated Grid account. If no key is configured:
+All snippets read those two env vars. A durable key belongs to one canonical
+Grid account. Google and a proved wallet can be linked to that account without
+duplicating balances or promotional grants. If no key is configured:
 
 1. Give the human this link:
    `https://console.aipowergrid.io/?callbackUrl=%2Fdashboard%2Fapi-key`.
@@ -228,10 +229,11 @@ Also available (drop-in for their SDKs): **Anthropic Messages** at
 ## Account, credits, grid status
 
 ```bash
-# Your paid balance and any displayed free allowance (USD-denominated)
+# Your promotional, daily-free, and purchased pockets (USD-denominated)
 curl -s "$GRID_BASE_URL/v1/account/credits" -H "apikey: $GRID_API_KEY"
-#  → {"free":{"remaining_usd":…,"active":false},"paid":{"balance_usd":…},
-#      "total_spendable_usd":…}
+#  → {"promotional":{"remaining_usd":…,"active":false},
+#      "free":{"remaining_usd":…,"active":false},"paid":{"balance_usd":…},
+#      "total_spendable_usd":…,"total_preview_usd":…}
 
 # Online workers and what each serves
 curl -s "$GRID_BASE_URL/v1/workers" -H "apikey: $GRID_API_KEY"
@@ -260,9 +262,9 @@ curl -s "$GRID_BASE_URL/v1/stats/totals" -H "apikey: $GRID_API_KEY"
   add a `User-Agent` header. Or avoid the fetch with `response_format:"b64_json"`.
 - **Out-of-range params → `422`**, not a silent clamp. Read the error; it tells you
   the allowed band.
-- **Free allowance:** inspect `free.active` and `total_spendable_usd` from
-  `/v1/account/credits`. When `free.active` is false, the displayed allowance is
-  preview-only and only paid balance is spendable. A `402` means the request
-  could not reserve enough spendable credit.
+- **Credit gates:** inspect `promotional.active`, `free.active`,
+  `total_spendable_usd`, and `total_preview_usd` from `/v1/account/credits`.
+  A displayed pocket can be preview-only while its rollout gate is off. A `402`
+  means the request could not reserve enough currently spendable credit.
 - **Video takes real time.** Use `progress_token` + `/v1/progress/{token}` rather
   than a long blocking curl in an interactive agent.
