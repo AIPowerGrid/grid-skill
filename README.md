@@ -3,12 +3,14 @@
 
 # AI Power Grid for agents
 
-One small repo with three ways for agents and developers to use AI Power Grid:
+One small repo with four ways for agents and developers to use AI Power Grid:
 
 - **[`SKILL.md`](./SKILL.md)** - portable, dependency-free HTTP guidance.
 - **`aipg`** - CLI for models, quotes, credits, text, image, video, and audio.
 - **`aipg-mcp`** - local stdio Model Context Protocol server with the same
   capability surface and shareable media links.
+- **`aipg-mcp-http`** - staged remote Streamable HTTP MCP resource. It is dark
+  until the Core OAuth and Console consent rollout passes.
 
 Install the signed package from npm:
 
@@ -105,11 +107,35 @@ value. The server exposes:
 - `aipg_generate_video`
 - `aipg_generate_audio`
 
-Remote HTTP MCP is deliberately not exposed yet. The staged browser login
-improves the local CLI and stdio transport; it is not a remote MCP endpoint. A
-remote server must use
-short-lived, audience-bound authorization; relaying durable Grid API keys would
-violate MCP's authorization model and create a credential-broker liability.
+### Remote MCP rollout
+
+Source `0.2.0` includes the remote Streamable HTTP resource, but it is not
+deployed or public yet. It accepts only Core-issued, 15-minute, audience-bound
+user tokens. The server authenticates each MCP HTTP request through Core's
+introspection endpoint, requires both `account.read` and `inference.submit`,
+and forwards that same user token to Grid. It never accepts or relays a durable
+Grid API key.
+
+The process is intentionally loopback-only and belongs behind the trusted
+`api.aipowergrid.io` reverse proxy:
+
+```bash
+export AIPG_MCP_SERVICE_KEY="grid_..."  # grid-mcp; oauth.introspect only
+export AIPG_MCP_HOST="127.0.0.1"
+export AIPG_MCP_PORT="8788"
+aipg-mcp-http
+```
+
+The public route will be `https://api.aipowergrid.io/v1/mcp`. The local
+`/healthz` response contains only `{"status":"ok"}`. Host and Origin guards,
+a 256 KiB request limit, bounded introspection responses, exact issuer/audience
+checks, strict scope enforcement, and fail-closed upstream errors are part of
+the server contract.
+
+Do not run this command with an ordinary Grid key. Provision `grid-mcp` with
+only `oauth.introspect`, store it in the server secret store, and keep the
+reverse-proxy route dark until Core migration `0031`, Console consent, OAuth
+canary, charging, expiry, denial, and revocation tests all pass.
 
 ## Portable skill
 
@@ -130,7 +156,8 @@ surface. All three call the same public API and keep Core as the source of truth
 ## Package release status
 
 `@aipowergrid/mcp@0.1.1` is the current public release. Source is bumped to
-unpublished `0.2.0` for the dark browser-authorization client. Releases come
+unpublished `0.2.0` for the dark browser-authorization and remote-MCP rollout.
+Releases come
 only from matching `mcp-vX.Y.Z` tags through GitHub Actions with npm provenance.
 The repository workflow is the package's npm Trusted Publisher; no long-lived
 npm publish token belongs in GitHub or on a developer workstation.

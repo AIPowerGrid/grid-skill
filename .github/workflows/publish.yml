@@ -44,9 +44,4 @@ jobs:
       - run: npm run check
       - run: npm audit --omit=dev
       - name: Publish with npm provenance
-        run: |
-          set -euo pipefail
-          [ -n "$NPM_TOKEN" ] && npm config set //registry.npmjs.org/:_authToken "$NPM_TOKEN"
-          npm publish --access public --provenance
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public --provenance

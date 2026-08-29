@@ -1,0 +1,161 @@
+// SPDX-FileCopyrightText: 2026 AI Power Grid
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+import type { AddressInfo } from "node:net";
+import type { Server } from "node:http";
+
+import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { createRemoteMcpHttpServer, MCP_MAX_REQUEST_BYTES } from "../src/remote.js";
+
+const CORE = "http://127.0.0.1:9999";
+const SERVICE_KEY = `grid_${"s".repeat(32)}`;
+const USER_TOKEN = `gridu_${"u".repeat(80)}.${"v".repeat(43)}`;
+const NOW_SECONDS = Math.floor(Date.now() / 1_000);
+
+const servers: Server[] = [];
+const clients: Client[] = [];
+
+afterEach(async () => {
+  await Promise.allSettled(clients.splice(0).map((client) => client.close()));
+  await Promise.allSettled(servers.splice(0).map((server) => new Promise<void>((resolve) => server.close(() => resolve()))));
+});
+
+function introspection(scopes = "account.read inference.submit"): Record<string, unknown> {
+  return {
+    active: true,
+    client_id: `grid_oauth_${"c".repeat(32)}`,
+    sub: "123e4567-e89b-42d3-a456-426614174000",
+    aud: CORE,
+    scope: scopes,
+    token_type: "Bearer",
+    iss: CORE,
+    iat: NOW_SECONDS - 10,
+    exp: NOW_SECONDS + 890,
+  };
+}
+
+async function listen(server: Server): Promise<string> {
+  servers.push(server);
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address() as AddressInfo;
+  return `http://127.0.0.1:${address.port}`;
+}
+
+function serverWith(
+  introspectionValue: Record<string, unknown> = introspection(),
+  gridFetch = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ total_usd: "1.00" }))),
+): { server: Server; introspectFetch: ReturnType<typeof vi.fn<typeof fetch>>; gridFetch: typeof gridFetch } {
+  const introspectFetch = vi.fn<typeof fetch>().mockImplementation(
+    async () => new Response(JSON.stringify(introspectionValue)),
+  );
+  return {
+    server: createRemoteMcpHttpServer({
+      serviceKey: SERVICE_KEY,
+      coreBaseUrl: CORE,
+      fetch: introspectFetch,
+      gridFetch,
+      onerror: () => undefined,
+    }),
+    introspectFetch,
+    gridFetch,
+  };
+}
+
+describe("remote Grid MCP server", () => {
+  it("serves MCP over HTTP and forwards only the verified user token to Grid", async () => {
+    const gridFetch = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ total_usd: "1.00" })));
+    const running = serverWith(introspection(), gridFetch);
+    const origin = await listen(running.server);
+    const transport = new StreamableHTTPClientTransport(new URL(`${origin}/v1/mcp`), {
+      requestInit: { headers: { Authorization: `Bearer ${USER_TOKEN}` } },
+    });
+    const client = new Client({ name: "remote-mcp-test", version: "1.0.0" });
+    clients.push(client);
+    await client.connect(transport);
+
+    const tools = await client.listTools();
+    expect(tools.tools.map((tool) => tool.name)).toContain("aipg_get_credits");
+    const result = await client.callTool({ name: "aipg_get_credits", arguments: {} });
+    expect(result.structuredContent).toEqual({ total_usd: "1.00" });
+
+    expect(running.introspectFetch).toHaveBeenCalled();
+    for (const [, init] of running.introspectFetch.mock.calls) {
+      expect(new Headers(init?.headers).get("authorization")).toBe(`Bearer ${SERVICE_KEY}`);
+      expect(String(init?.body)).toBe(`token=${USER_TOKEN}`);
+    }
+    expect(gridFetch).toHaveBeenCalledWith(`${CORE}/v1/account/credits`, expect.objectContaining({
+      headers: expect.objectContaining({ Authorization: `Bearer ${USER_TOKEN}` }),
+    }));
+    expect(JSON.stringify(gridFetch.mock.calls)).not.toContain(SERVICE_KEY);
+  });
+
+  it("advertises protected-resource metadata when authorization is missing", async () => {
+    const running = serverWith();
+    const origin = await listen(running.server);
+    const response = await fetch(`${origin}/v1/mcp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }),
+    });
+    expect(response.status).toBe(401);
+    expect(response.headers.get("www-authenticate")).toContain(
+      `resource_metadata="${CORE}/.well-known/oauth-protected-resource"`,
+    );
+    expect(running.introspectFetch).not.toHaveBeenCalled();
+  });
+
+  it("returns insufficient_scope when either required scope is absent", async () => {
+    const running = serverWith(introspection("account.read"));
+    const origin = await listen(running.server);
+    const response = await fetch(`${origin}/v1/mcp`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${USER_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }),
+    });
+    expect(response.status).toBe(403);
+    expect(response.headers.get("www-authenticate")).toContain("insufficient_scope");
+    expect(response.headers.get("www-authenticate")).toContain("inference.submit");
+  });
+
+  it("rejects oversized bodies, hostile origins, and unrelated paths before MCP handling", async () => {
+    const running = serverWith();
+    const origin = await listen(running.server);
+    const headers = {
+      Authorization: `Bearer ${USER_TOKEN}`,
+      "Content-Type": "application/json",
+    };
+
+    const oversized = await fetch(`${origin}/v1/mcp`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ value: "x".repeat(MCP_MAX_REQUEST_BYTES) }),
+    });
+    expect(oversized.status).toBe(413);
+
+    const hostileOrigin = await fetch(`${origin}/v1/mcp`, {
+      method: "POST",
+      headers: { ...headers, Origin: "https://attacker.example" },
+      body: "{}",
+    });
+    expect(hostileOrigin.status).toBe(403);
+
+    const missing = await fetch(`${origin}/not-mcp`, { headers: { Origin: "https://console.aipowergrid.io" } });
+    expect(missing.status).toBe(404);
+  });
+
+  it("exposes a minimal unauthenticated loopback health check", async () => {
+    const running = serverWith();
+    const origin = await listen(running.server);
+    const response = await fetch(`${origin}/healthz`);
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ status: "ok" });
+  });
+});
