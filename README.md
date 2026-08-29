@@ -10,8 +10,11 @@ One small repo with three ways for agents and developers to use AI Power Grid:
 - **`aipg-mcp`** - local stdio Model Context Protocol server with the same
   capability surface and shareable media links.
 
-The package is not on npm yet. Until the first signed release, install from a
-reviewed checkout rather than guessing a package name from the registry.
+Install the signed package from npm:
+
+```bash
+npm install --global @aipowergrid/mcp
+```
 
 ## What it covers
 
@@ -43,13 +46,9 @@ That keeps credentials out of process listings and shell history.
 
 ## CLI
 
-From a reviewed checkout:
+After installation:
 
 ```bash
-npm ci
-npm run build
-npm link
-
 aipg models
 aipg credits
 aipg quote --model "Krea 2 Turbo" --modality image
@@ -64,7 +63,7 @@ responses contain HTTPS URLs that agents can display, download, or share.
 
 ## MCP
 
-Build the package, then configure your MCP client to execute:
+Configure your MCP client to execute:
 
 ```json
 {
@@ -113,9 +112,7 @@ surface. All three call the same public API and keep Core as the source of truth
 
 ## Package release status
 
-The npm package is staged as `@aipowergrid/mcp@0.1.0` and is not yet published.
-Releases run only from a matching `mcp-vX.Y.Z` tag through GitHub Actions with
-npm provenance. The first publication uses a temporary package-scoped token;
-after the package exists, the repository workflow becomes its npm Trusted
-Publisher and the token is removed. Never publish this package from a local
-workstation.
+`@aipowergrid/mcp` is published from matching `mcp-vX.Y.Z` tags through GitHub
+Actions with npm provenance. The repository workflow is the package's npm
+Trusted Publisher; no long-lived npm publish token belongs in GitHub or on a
+developer workstation.
