@@ -1,0 +1,213 @@
+// SPDX-FileCopyrightText: 2026 AI Power Grid
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+export const GRID_ORIGIN = "https://api.aipowergrid.io";
+
+const MAX_ERROR_BODY = 2_000;
+const DEFAULT_TIMEOUT_MS = 5 * 60_000;
+
+export type JsonObject = Record<string, unknown>;
+export type Modality = "text" | "image" | "video" | "audio" | "3d";
+
+export interface GridClientOptions {
+  apiKey?: string;
+  baseUrl?: string;
+  fetch?: typeof globalThis.fetch;
+  timeoutMs?: number;
+}
+
+export interface QuoteRequest {
+  model: string;
+  modality: Modality;
+  prompt_tokens?: number | undefined;
+  max_tokens?: number | undefined;
+  n?: number | undefined;
+  seconds?: number | undefined;
+}
+
+export interface TextRequest {
+  prompt: string;
+  model?: string | undefined;
+  max_tokens?: number | undefined;
+  temperature?: number | undefined;
+  system?: string | undefined;
+}
+
+export interface ImageRequest {
+  prompt: string;
+  model?: string | undefined;
+  n?: number | undefined;
+  size?: string | undefined;
+  seed?: number | undefined;
+  negative_prompt?: string | undefined;
+  style?: string | undefined;
+}
+
+export interface VideoRequest {
+  prompt: string;
+  model?: string | undefined;
+  seconds?: number | undefined;
+  fps?: number | undefined;
+  size?: string | undefined;
+  seed?: number | undefined;
+  image?: string | undefined;
+  style?: string | undefined;
+}
+
+export interface AudioRequest {
+  prompt: string;
+  lyrics?: string | undefined;
+  model?: string | undefined;
+  seconds?: number | undefined;
+  inference_steps?: number | undefined;
+  bpm?: number | undefined;
+  key_scale?: string | undefined;
+  time_signature?: "2/4" | "3/4" | "4/4" | "6/8" | undefined;
+  vocal_language?: string | undefined;
+  seed?: number | undefined;
+}
+
+function normalizeBaseUrl(value: string | undefined): string {
+  const candidate = (value || GRID_ORIGIN).replace(/\/+$/, "");
+  const parsed = new URL(candidate);
+  const isLoopback = parsed.hostname === "127.0.0.1" || parsed.hostname === "localhost" || parsed.hostname === "::1";
+  if (candidate !== GRID_ORIGIN && !isLoopback) {
+    throw new Error(`GRID_BASE_URL must be ${GRID_ORIGIN} or a loopback test URL`);
+  }
+  if (candidate === GRID_ORIGIN && parsed.protocol !== "https:") {
+    throw new Error("The production Grid API requires HTTPS");
+  }
+  return candidate;
+}
+
+function scrub(value: string, secret: string | undefined): string {
+  return secret ? value.replaceAll(secret, "[REDACTED]") : value;
+}
+
+function omitUndefined<T extends object>(value: T): JsonObject {
+  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined));
+}
+
+export class GridApiError extends Error {
+  constructor(
+    message: string,
+    readonly status?: number,
+  ) {
+    super(message);
+    this.name = "GridApiError";
+  }
+}
+
+export class GridClient {
+  readonly baseUrl: string;
+  private readonly apiKey: string | undefined;
+  private readonly fetchImpl: typeof globalThis.fetch;
+  private readonly timeoutMs: number;
+
+  constructor(options: GridClientOptions = {}) {
+    this.baseUrl = normalizeBaseUrl(options.baseUrl ?? process.env.GRID_BASE_URL);
+    this.apiKey = options.apiKey ?? process.env.GRID_API_KEY;
+    this.fetchImpl = options.fetch ?? globalThis.fetch;
+    this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  }
+
+  async listModels(): Promise<JsonObject> {
+    const [text, media] = await Promise.all([
+      this.request<JsonObject>("GET", "/v1/models", undefined, false),
+      this.request<JsonObject>("GET", "/v1/status/models", undefined, false),
+    ]);
+    return { text, media };
+  }
+
+  async getCredits(): Promise<JsonObject> {
+    return this.request("GET", "/v1/account/credits");
+  }
+
+  async quote(input: QuoteRequest): Promise<JsonObject> {
+    return this.request("POST", "/v1/account/credits/quote", omitUndefined(input));
+  }
+
+  async generateText(input: TextRequest): Promise<JsonObject> {
+    const messages: JsonObject[] = [];
+    if (input.system) messages.push({ role: "system", content: input.system });
+    messages.push({ role: "user", content: input.prompt });
+    return this.request("POST", "/v1/chat/completions", omitUndefined({
+      model: input.model ?? "auto",
+      messages,
+      max_tokens: input.max_tokens ?? 1_024,
+      temperature: input.temperature,
+      stream: false,
+    }));
+  }
+
+  async generateImage(input: ImageRequest): Promise<JsonObject> {
+    return this.request("POST", "/v1/images/generations", omitUndefined({
+      ...input,
+      response_format: "url",
+    }));
+  }
+
+  async generateVideo(input: VideoRequest): Promise<JsonObject> {
+    return this.request("POST", "/v1/videos/generations", omitUndefined({
+      ...input,
+      response_format: "url",
+    }));
+  }
+
+  async generateAudio(input: AudioRequest): Promise<JsonObject> {
+    return this.request("POST", "/v1/audio/generations", omitUndefined(input));
+  }
+
+  private async request<T extends JsonObject>(
+    method: "GET" | "POST",
+    path: string,
+    body?: JsonObject,
+    authenticated = true,
+  ): Promise<T> {
+    if (authenticated && !this.apiKey) {
+      throw new GridApiError(
+        "GRID_API_KEY is required. Create one at https://console.aipowergrid.io/dashboard/api-key and store it in your environment.",
+      );
+    }
+
+    const headers: Record<string, string> = { Accept: "application/json" };
+    if (body) headers["Content-Type"] = "application/json";
+    if (authenticated && this.apiKey) headers.Authorization = `Bearer ${this.apiKey}`;
+
+    try {
+      const init: RequestInit = {
+        method,
+        headers,
+        redirect: "error",
+        signal: AbortSignal.timeout(this.timeoutMs),
+      };
+      if (body) init.body = JSON.stringify(body);
+      const response = await this.fetchImpl(`${this.baseUrl}${path}`, init);
+      const text = await response.text();
+      if (!response.ok) {
+        const detail = scrub(text.slice(0, MAX_ERROR_BODY), this.apiKey);
+        throw new GridApiError(`Grid API ${response.status} on ${path}${detail ? `: ${detail}` : ""}`, response.status);
+      }
+      if (!text) return {} as T;
+      try {
+        return JSON.parse(text) as T;
+      } catch {
+        throw new GridApiError(`Grid API returned invalid JSON on ${path}`, response.status);
+      }
+    } catch (error) {
+      if (error instanceof GridApiError) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      throw new GridApiError(scrub(`Grid API request failed on ${path}: ${message}`, this.apiKey));
+    }
+  }
+}
+
+export function extractMediaUrls(value: JsonObject): string[] {
+  const data = value.data;
+  if (!Array.isArray(data)) return [];
+  return data.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const url = (item as JsonObject).url;
+    return typeof url === "string" && /^https:\/\//.test(url) ? [url] : [];
+  });
+}

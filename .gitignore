@@ -4,3 +4,7 @@
 *.mp4
 grid_*.webp
 out.*
+node_modules/
+dist/
+coverage/
+*.tgz

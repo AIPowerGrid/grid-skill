@@ -1,7 +1,7 @@
 ---
 name: grid
 description: >-
-  Generate images and video, run LLM chat completions, and query models,
+  Generate images, video, and audio, run LLM chat completions, and query models,
   workers, and credits on the AI Power Grid (api.aipowergrid.io) — an
   OpenAI-compatible decentralized inference API. Use whenever the user wants to
   create an image or video, call a chat/LLM model, or inspect grid status. Core
@@ -11,8 +11,8 @@ description: >-
 
 # AI Power Grid — agent skill
 
-The grid is an **OpenAI-compatible** API for decentralized image, video, and text
-generation. If you know the OpenAI API, you know this. Authentication accepts:
+The grid is an **OpenAI-compatible** API for decentralized image, video, audio,
+and text generation. If you know the OpenAI API, you know this. Authentication accepts:
 
 1. Grid-native `apikey: <key>` (used in the curl examples below).
 2. OpenAI-compatible `Authorization: Bearer <key>`; Anthropic Messages also
@@ -49,6 +49,7 @@ supported handoff.
 |---------|------|
 | Generate an image | `POST /v1/images/generations` |
 | Generate a video | `POST /v1/videos/generations` |
+| Generate audio or music | `POST /v1/audio/generations` |
 | Generate a 3D mesh (image→GLB) | `POST /v1/3d/generations` |
 | Chat / LLM completion | `POST /v1/chat/completions` |
 | List text models | `GET /v1/models` |
@@ -62,6 +63,7 @@ supported handoff.
 Current model names (change over time — verify with `/v1/status/models`):
 - **Image:** `Krea 2 Turbo` (fast ~8s), `z-image-turbo`, `FLUX.2 Klein 4B FP8`
 - **Video:** `LTX-2.3`
+- **Audio:** discover the live ACE-Step model with `/v1/status/models`
 - **3D:** `TRELLIS2` (image→mesh)
 - **Text:** `auto` (router), `gpt-oss-120b`, `gpt-oss-20b`, `deepseek-v4-flash-nvfp4`
 
@@ -260,6 +262,29 @@ curl -sN -X POST "$GRID_BASE_URL/v1/chat/completions" \
 
 Also available (drop-in for their SDKs): **Anthropic Messages** at
 `POST /v1/messages`, **OpenAI Responses** at `POST /v1/responses`.
+
+---
+
+## Audio / music
+
+Generate WAV audio at `POST /v1/audio/generations`. Discover the currently
+online model before naming one; omit `model` to use Core's governed default.
+
+```bash
+curl -s --max-time 360 -X POST "$GRID_BASE_URL/v1/audio/generations" \
+  -H "apikey: $GRID_API_KEY" -H "Content-Type: application/json" \
+  -d '{"prompt":"hopeful instrumental post-rock, clean guitars, steady drums","seconds":30,"bpm":96,"key_scale":"A minor"}'
+# -> {"data":[{"url":"https://media.aipg.art/.../0.wav","seed":...}],"grid":{...}}
+```
+
+For vocals, add `lyrics` and a two-letter `vocal_language`. Useful controls are
+`seconds` (10-300), `inference_steps`, `bpm`, `key_scale`, `time_signature`
+(`2/4`, `3/4`, `4/4`, or `6/8`), `vocal_language`, and `seed`. Generation can
+take longer than text; set a generous client timeout. Return and retain the
+HTTPS media URL rather than requesting inline base64 audio.
+
+If the local `aipg-mcp` server is installed, prefer its typed tools for routine
+calls. Use these HTTP examples as the portable fallback and protocol reference.
 
 ---
 

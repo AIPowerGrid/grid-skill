@@ -1,17 +1,22 @@
-# grid-skill - portable Grid API agent skill
+# grid-skill - Grid agent skill, CLI, and MCP server
 
 ## Purpose
 
-Teach coding agents to use the AI Power Grid public API through concise, tested
-HTTP examples. The skill covers text, image, and video generation plus model,
-worker, usage, and credit inspection. It is documentation-only: it does not
-contain an SDK, credential broker, or runtime service.
+Give agents a small, auditable way to discover and use AI Power Grid. The repo
+owns the portable HTTP skill, the `aipg` CLI, and the local stdio MCP server for
+text, image, video, audio, model discovery, quotes, and credit inspection.
 
 ## Ownership
 
 - `SKILL.md` - the agent-facing contract. Its YAML description controls when an
   agent should load it; the body contains operational API guidance.
-- `README.md` - human-facing installation and scope summary.
+- `src/client.ts` - fixed-origin Grid HTTP client and request contracts.
+- `src/mcp.ts` - MCP tool definitions. Keep tools thin; API behavior belongs to
+  Core, not this adapter.
+- `src/stdio.ts` - local MCP stdio entry point.
+- `src/cli.ts` - human and automation CLI entry point.
+- `tests/` - protocol, credential-safety, and request-contract coverage.
+- `README.md` - human-facing setup, installation, and security boundaries.
 - `.github/workflows/` - repository checks, if present.
 
 ## Local Contracts
@@ -23,6 +28,11 @@ contain an SDK, credential broker, or runtime service.
   safe live read before claiming they are current.
 - Never place an API key in this repository, examples, URLs, prompts, logs, or
   command history. Examples use `GRID_API_KEY` from the environment.
+- Never accept a key as a CLI argument. The local CLI and stdio server read it
+  from `GRID_API_KEY` so process listings and shell history do not expose it.
+- Production API traffic is pinned to `https://api.aipowergrid.io`. Alternate
+  origins are allowed only on loopback for tests. Reject redirects and return
+  URL media output rather than unbounded base64 payloads.
 - Durable keys require a human-authenticated Grid account. Today the human signs
   in at the developer console with Google, GitHub, or a wallet and creates the
   key on the API Keys page. Do not claim an agent device-code flow exists until
@@ -30,13 +40,17 @@ contain an SDK, credential broker, or runtime service.
 - A future agent-connect flow must return only a short-lived, one-time approval
   code before human authentication. Never put the resulting API key in the
   approval URL.
+- Do not ship a remote HTTP MCP server that accepts a Grid API key and forwards
+  it to Core. MCP token passthrough is forbidden. Remote MCP requires a
+  short-lived, audience-bound Grid user token and server-side authorization in
+  Core; until that lands, stdio is the supported MCP transport.
 - Keep the skill concise enough to load as one operational reference. Move large
   protocol references out only when the body approaches the skill context limit.
 
 ## Work Guidance
 
-- Change `SKILL.md` and `README.md` together when setup or supported capability
-  changes.
+- Change `SKILL.md`, `README.md`, and MCP/CLI tools together when setup or the
+  supported capability surface changes.
 - Prefer discovery calls such as `/v1/status/models` over hard-coding model
   availability. Any named models are examples, not guarantees.
 - Label planned endpoints and flows explicitly. Never provide copy-paste calls
@@ -47,6 +61,7 @@ contain an SDK, credential broker, or runtime service.
 ## Verification
 
 - Run `git diff --check`.
+- Run `npm run check` and `npm audit --audit-level=low`.
 - Validate frontmatter with the Codex skill validator when available:
   `python3 /Users/j/.codex/skills/.system/skill-creator/scripts/quick_validate.py .`
 - Verify read-only examples safely. Generation examples require an authorized
@@ -54,4 +69,5 @@ contain an SDK, credential broker, or runtime service.
 
 ## Child DOX Index
 
-- None - this is a small documentation-only repo.
+- None - runtime ownership is described above and the implementation remains
+  intentionally small.
