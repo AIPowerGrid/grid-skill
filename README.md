@@ -110,3 +110,12 @@ snippets are tool-agnostic.
 The skill remains the zero-install option. MCP gives compatible agents typed
 tools and structured output; the CLI gives humans and automation a stable shell
 surface. All three call the same public API and keep Core as the source of truth.
+
+## Package release status
+
+The npm package is staged as `@aipowergrid/mcp@0.1.0` and is not yet published.
+Releases run only from a matching `mcp-vX.Y.Z` tag through GitHub Actions with
+npm provenance. The first publication uses a temporary package-scoped token;
+after the package exists, the repository workflow becomes its npm Trusted
+Publisher and the token is removed. Never publish this package from a local
+workstation.
