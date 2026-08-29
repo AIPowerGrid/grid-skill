@@ -12,8 +12,8 @@
     }
   },
   "bin": {
-    "aipg": "./dist/cli.js",
-    "aipg-mcp": "./dist/stdio.js"
+    "aipg": "dist/cli.js",
+    "aipg-mcp": "dist/stdio.js"
   },
   "files": [
     "dist",

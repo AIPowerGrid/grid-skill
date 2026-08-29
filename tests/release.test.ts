@@ -14,6 +14,10 @@ describe("npm release contract", () => {
     ]);
 
     expect(packageJson.name).toBe("@aipowergrid/mcp");
+    expect(packageJson.bin).toEqual({
+      aipg: "dist/cli.js",
+      "aipg-mcp": "dist/stdio.js",
+    });
     expect(workflow).toMatch(/tags:\s*\n\s+- "mcp-v\*\.\*\.\*"/);
     expect(workflow).toMatch(/expected="mcp-v\$\(node -p/);
     expect(workflow).toMatch(/fetch-depth: 0/);
