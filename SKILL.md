@@ -39,9 +39,11 @@ duplicating balances or promotional grants. If no key is configured:
 3. Ask them to store the key in their local secret store or `GRID_API_KEY`
    environment variable. Do not ask them to paste it into chat.
 
-Do not invent, scrape, or request an anonymous key. The planned agent-connect
-device flow is not live yet; until it ships, console authentication is the
-supported handoff.
+Do not invent, scrape, or request an anonymous key. Native browser authorization
+is staged for the next `aipg` CLI release, but Core keeps it disabled until the
+supervised OAuth rollout passes. Until that release is explicitly announced,
+console key creation is the supported handoff; do not claim `aipg login` or a
+device flow is live.
 
 ## Endpoint map
 

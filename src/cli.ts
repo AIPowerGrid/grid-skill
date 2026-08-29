@@ -4,6 +4,7 @@
 
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 
+import { logoutOAuth, oauthLogin, resolveGridCredential } from "./auth.js";
 import { GridClient, type JsonObject, type Modality } from "./client.js";
 import { createGridMcpServer } from "./mcp.js";
 
@@ -50,6 +51,9 @@ function help(): void {
 
 Usage:
   aipg models
+  aipg login [--no-open]
+  aipg logout
+  aipg auth-status
   aipg credits
   aipg quote --model MODEL --modality text|image|video|audio|3d [--seconds N] [--max-tokens N]
   aipg text --prompt TEXT [--model MODEL] [--max-tokens N] [--system TEXT]
@@ -58,18 +62,53 @@ Usage:
   aipg audio --prompt TEXT [--lyrics TEXT] [--model MODEL] [--seconds N] [--bpm N]
   aipg mcp
 
-Set GRID_API_KEY in your environment. Never pass credentials as command arguments.`);
+Run \`aipg login\` for short-lived browser authorization, or set GRID_API_KEY.
+Never pass credentials as command arguments.`);
+}
+
+async function authenticatedClient(): Promise<GridClient> {
+  const credential = await resolveGridCredential();
+  if (!credential) return new GridClient();
+  return credential.source === "api_key"
+    ? new GridClient({ apiKey: credential.token })
+    : new GridClient({ accessToken: credential.token });
 }
 
 async function main(): Promise<void> {
   const { command, flags } = parseArgs(process.argv.slice(2));
   if (!command || command === "help" || flags.help) return help();
+  if (command === "login") {
+    const session = await oauthLogin({
+      openBrowser: flags.no_open !== true,
+      onAuthorize(url, opened) {
+        console.log(opened ? "Opened Grid authorization in your browser." : "Open this Grid authorization URL:");
+        console.log(url);
+      },
+    });
+    console.log(`Authorized through ${session.expires_at} with scopes: ${session.scope}`);
+    return;
+  }
+  if (command === "logout") {
+    console.log(await logoutOAuth() ? "Removed the local Grid OAuth session." : "No local Grid OAuth session was stored.");
+    return;
+  }
+  if (command === "auth-status") {
+    const credential = await resolveGridCredential();
+    if (!credential) {
+      console.log("Not authenticated. Run `aipg login` or set GRID_API_KEY.");
+      return;
+    }
+    const suffix = credential.expiresAt ? ` until ${credential.expiresAt}` : "";
+    console.log(`Authenticated via ${credential.source}${suffix}.`);
+    return;
+  }
   if (command === "mcp") {
-    serveStdio(() => createGridMcpServer(), { onerror: (error) => console.error(`aipg-mcp: ${error.message}`) });
+    const client = await authenticatedClient();
+    serveStdio(() => createGridMcpServer(client), { onerror: (error) => console.error(`aipg-mcp: ${error.message}`) });
     return;
   }
 
-  const client = new GridClient();
+  const client = await authenticatedClient();
   let output: JsonObject;
   switch (command) {
     case "models":
