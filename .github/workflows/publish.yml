@@ -1,0 +1,52 @@
+# SPDX-FileCopyrightText: 2026 AI Power Grid
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+name: Publish MCP and CLI package
+
+on:
+  push:
+    tags:
+      - "mcp-v*.*.*"
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - run: npm install --global npm@11.17.0
+      - name: Require tag to match package version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          expected="mcp-v$(node -p "require('./package.json').version")"
+          test "$RELEASE_TAG" = "$expected" || {
+            echo "Tag $RELEASE_TAG does not match $expected" >&2
+            exit 1
+          }
+      - name: Require the release commit to be on main
+        run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+      - run: npm ci
+      - run: npm run check
+      - run: npm audit --omit=dev
+      - name: Publish with npm provenance
+        run: |
+          set -euo pipefail
+          [ -n "$NPM_TOKEN" ] && npm config set //registry.npmjs.org/:_authToken "$NPM_TOKEN"
+          npm publish --access public --provenance
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

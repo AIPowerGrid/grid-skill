@@ -17,7 +17,8 @@ text, image, video, audio, model discovery, quotes, and credit inspection.
 - `src/cli.ts` - human and automation CLI entry point.
 - `tests/` - protocol, credential-safety, and request-contract coverage.
 - `README.md` - human-facing setup, installation, and security boundaries.
-- `.github/workflows/` - repository checks, if present.
+- `.github/workflows/` - repository checks plus the tag-gated npm provenance
+  release for `@aipowergrid/mcp`.
 
 ## Local Contracts
 
@@ -44,6 +45,10 @@ text, image, video, audio, model discovery, quotes, and credit inspection.
   it to Core. MCP token passthrough is forbidden. Remote MCP requires a
   short-lived, audience-bound Grid user token and server-side authorization in
   Core; until that lands, stdio is the supported MCP transport.
+- npm releases come only from a matching `mcp-vX.Y.Z` tag through the pinned
+  publication workflow. Bootstrap the first package with a temporary scoped
+  token, configure this workflow as its trusted publisher, then remove the
+  token and use OIDC-only releases.
 - Keep the skill concise enough to load as one operational reference. Move large
   protocol references out only when the body approaches the skill context limit.
 
