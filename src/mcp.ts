@@ -6,7 +6,7 @@ import { z } from "zod";
 
 import { GridClient, extractMediaUrls, type JsonObject } from "./client.js";
 
-const VERSION = "0.1.0";
+const VERSION = "0.2.0";
 
 function result(value: JsonObject, includeUrls = false): CallToolResult {
   const content: CallToolResult["content"] = [

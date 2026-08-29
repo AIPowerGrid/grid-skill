@@ -27,9 +27,9 @@ npm install --global @aipowergrid/mcp
 - Models, styles, workers, live per-model performance, grid totals
 - Account credits / usage
 
-## Authenticate once
+## Authentication
 
-First, set your key. Open the
+The published `0.1.x` package uses a durable scoped key. Open the
 [authenticated API-key handoff](https://console.aipowergrid.io/?callbackUrl=%2Fdashboard%2Fapi-key),
 sign in with Google, GitHub, or a wallet, and create one. Keep the key in an
 environment variable or local secret store; do not paste it into an agent chat.
@@ -43,6 +43,21 @@ export GRID_BASE_URL="https://api.aipowergrid.io"
 
 The CLI and stdio MCP intentionally do not accept keys on the command line.
 That keeps credentials out of process listings and shell history.
+
+Version `0.2.0` is staged in source with native browser authorization:
+
+```bash
+aipg login
+aipg auth-status
+aipg logout
+```
+
+It dynamically registers a public client, requires S256 PKCE, validates the
+loopback callback's state, issuer, and host, and stores only the 15-minute Grid
+user token in a mode-`0600` local session. There is no client secret or refresh
+token. Core and Console keep this flow dark until the supervised OAuth rollout
+passes, so the current npm release still requires `GRID_API_KEY`; do not publish
+`0.2.0` or describe browser login as live before that gate closes.
 
 ## CLI
 
@@ -90,7 +105,9 @@ value. The server exposes:
 - `aipg_generate_video`
 - `aipg_generate_audio`
 
-Remote HTTP MCP is deliberately not exposed yet. A remote server must use
+Remote HTTP MCP is deliberately not exposed yet. The staged browser login
+improves the local CLI and stdio transport; it is not a remote MCP endpoint. A
+remote server must use
 short-lived, audience-bound authorization; relaying durable Grid API keys would
 violate MCP's authorization model and create a credential-broker liability.
 
@@ -112,7 +129,8 @@ surface. All three call the same public API and keep Core as the source of truth
 
 ## Package release status
 
-`@aipowergrid/mcp` is published from matching `mcp-vX.Y.Z` tags through GitHub
-Actions with npm provenance. The repository workflow is the package's npm
-Trusted Publisher; no long-lived npm publish token belongs in GitHub or on a
-developer workstation.
+`@aipowergrid/mcp@0.1.1` is the current public release. Source is bumped to
+unpublished `0.2.0` for the dark browser-authorization client. Releases come
+only from matching `mcp-vX.Y.Z` tags through GitHub Actions with npm provenance.
+The repository workflow is the package's npm Trusted Publisher; no long-lived
+npm publish token belongs in GitHub or on a developer workstation.

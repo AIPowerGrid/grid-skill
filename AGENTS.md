@@ -38,17 +38,19 @@ text, image, video, audio, model discovery, quotes, and credit inspection.
   in at the developer console with Google, GitHub, or a wallet and creates the
   key on the API Keys page. Do not claim an agent device-code flow exists until
   core and console ship it.
-- A future agent-connect flow must return only a short-lived, one-time approval
-  code before human authentication. Never put the resulting API key in the
-  approval URL.
+- Native browser authorization is staged in `src/auth.ts` for `0.2.0` but is
+  not public while Core's OAuth gate is off. It uses dynamic public-client
+  registration, S256 PKCE, an ephemeral loopback callback, exact state/issuer
+  validation, and a 15-minute user token without refresh. Never put a Grid API
+  key or access token in the authorization URL.
 - Do not ship a remote HTTP MCP server that accepts a Grid API key and forwards
   it to Core. MCP token passthrough is forbidden. Remote MCP requires a
   short-lived, audience-bound Grid user token and server-side authorization in
   Core; until that lands, stdio is the supported MCP transport.
 - npm releases come only from a matching `mcp-vX.Y.Z` tag through the pinned
-  publication workflow. Bootstrap the first package with a temporary scoped
-  token, configure this workflow as its trusted publisher, then remove the
-  token and use OIDC-only releases.
+  OIDC publication workflow. `0.1.1` is public; source `0.2.0` must remain
+  unpublished until the supervised OAuth rollout passes. Do not restore the
+  revoked bootstrap token or a repository `NPM_TOKEN` secret.
 - Keep the skill concise enough to load as one operational reference. Move large
   protocol references out only when the body approaches the skill context limit.
 

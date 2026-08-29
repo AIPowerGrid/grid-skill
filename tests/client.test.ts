@@ -57,6 +57,20 @@ describe("GridClient", () => {
     });
   });
 
+  it("accepts a short-lived OAuth bearer token without treating it as an API-key argument", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({ total_usd: "1.00" }));
+    const client = new GridClient({
+      accessToken: "test_short_lived_user_token",
+      baseUrl: "http://localhost:9999",
+      fetch: fetchMock,
+    });
+
+    await client.getCredits();
+    expect((fetchMock.mock.calls[0]?.[1] as RequestInit).headers).toMatchObject({
+      Authorization: "Bearer test_short_lived_user_token",
+    });
+  });
+
   it("forces URL output for media and extracts only HTTPS links", async () => {
     const payload = {
       data: [

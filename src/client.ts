@@ -11,6 +11,7 @@ export type Modality = "text" | "image" | "video" | "audio" | "3d";
 
 export interface GridClientOptions {
   apiKey?: string;
+  accessToken?: string;
   baseUrl?: string;
   fetch?: typeof globalThis.fetch;
   timeoutMs?: number;
@@ -67,7 +68,7 @@ export interface AudioRequest {
   seed?: number | undefined;
 }
 
-function normalizeBaseUrl(value: string | undefined): string {
+export function normalizeBaseUrl(value: string | undefined): string {
   const candidate = (value || GRID_ORIGIN).replace(/\/+$/, "");
   const parsed = new URL(candidate);
   const isLoopback = parsed.hostname === "127.0.0.1" || parsed.hostname === "localhost" || parsed.hostname === "::1";
@@ -100,13 +101,13 @@ export class GridApiError extends Error {
 
 export class GridClient {
   readonly baseUrl: string;
-  private readonly apiKey: string | undefined;
+  private readonly credential: string | undefined;
   private readonly fetchImpl: typeof globalThis.fetch;
   private readonly timeoutMs: number;
 
   constructor(options: GridClientOptions = {}) {
     this.baseUrl = normalizeBaseUrl(options.baseUrl ?? process.env.GRID_BASE_URL);
-    this.apiKey = options.apiKey ?? process.env.GRID_API_KEY;
+    this.credential = options.apiKey ?? options.accessToken ?? process.env.GRID_API_KEY ?? process.env.GRID_ACCESS_TOKEN;
     this.fetchImpl = options.fetch ?? globalThis.fetch;
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   }
@@ -164,15 +165,15 @@ export class GridClient {
     body?: JsonObject,
     authenticated = true,
   ): Promise<T> {
-    if (authenticated && !this.apiKey) {
+    if (authenticated && !this.credential) {
       throw new GridApiError(
-        "GRID_API_KEY is required. Create one at https://console.aipowergrid.io/dashboard/api-key and store it in your environment.",
+        "Authentication is required. Run `aipg login` or set GRID_API_KEY from https://console.aipowergrid.io/dashboard/api-key.",
       );
     }
 
     const headers: Record<string, string> = { Accept: "application/json" };
     if (body) headers["Content-Type"] = "application/json";
-    if (authenticated && this.apiKey) headers.Authorization = `Bearer ${this.apiKey}`;
+    if (authenticated && this.credential) headers.Authorization = `Bearer ${this.credential}`;
 
     try {
       const init: RequestInit = {
@@ -185,7 +186,7 @@ export class GridClient {
       const response = await this.fetchImpl(`${this.baseUrl}${path}`, init);
       const text = await response.text();
       if (!response.ok) {
-        const detail = scrub(text.slice(0, MAX_ERROR_BODY), this.apiKey);
+        const detail = scrub(text.slice(0, MAX_ERROR_BODY), this.credential);
         throw new GridApiError(`Grid API ${response.status} on ${path}${detail ? `: ${detail}` : ""}`, response.status);
       }
       if (!text) return {} as T;
@@ -197,7 +198,7 @@ export class GridClient {
     } catch (error) {
       if (error instanceof GridApiError) throw error;
       const message = error instanceof Error ? error.message : String(error);
-      throw new GridApiError(scrub(`Grid API request failed on ${path}: ${message}`, this.apiKey));
+      throw new GridApiError(scrub(`Grid API request failed on ${path}: ${message}`, this.credential));
     }
   }
 }
