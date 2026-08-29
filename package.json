@@ -1,0 +1,67 @@
+{
+  "name": "@aipowergrid/mcp",
+  "version": "0.1.0",
+  "description": "AI Power Grid CLI and MCP server for text, image, video, and audio generation",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "aipg": "./dist/cli.js",
+    "aipg-mcp": "./dist/stdio.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "SKILL.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "lint": "tsc --noEmit -p tsconfig.json",
+    "check": "npm run typecheck && npm test && npm run build && npm pack --dry-run"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "aipg",
+    "ai-power-grid",
+    "openai-compatible",
+    "image-generation",
+    "video-generation",
+    "music-generation"
+  ],
+  "license": "AGPL-3.0-or-later",
+  "author": "AI Power Grid",
+  "homepage": "https://aipowergrid.io",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AIPowerGrid/grid-skill.git"
+  },
+  "bugs": {
+    "url": "https://github.com/AIPowerGrid/grid-skill/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.0.0",
+    "zod": "4.5.4"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.0.0",
+    "@types/node": "24.10.1",
+    "typescript": "5.9.3",
+    "vitest": "4.1.11"
+  }
+}
