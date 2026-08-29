@@ -14,6 +14,9 @@ text, image, video, audio, model discovery, quotes, and credit inspection.
 - `src/mcp.ts` - MCP tool definitions. Keep tools thin; API behavior belongs to
   Core, not this adapter.
 - `src/stdio.ts` - local MCP stdio entry point.
+- `src/remote-auth.ts` - fail-closed Core token introspection and MCP auth info.
+- `src/remote.ts` - loopback-bound, authenticated Streamable HTTP MCP server.
+- `src/http.ts` - remote MCP process entry point.
 - `src/cli.ts` - human and automation CLI entry point.
 - `tests/` - protocol, credential-safety, and request-contract coverage.
 - `README.md` - human-facing setup, installation, and security boundaries.
@@ -43,14 +46,19 @@ text, image, video, audio, model discovery, quotes, and credit inspection.
   registration, S256 PKCE, an ephemeral loopback callback, exact state/issuer
   validation, and a 15-minute user token without refresh. Never put a Grid API
   key or access token in the authorization URL.
-- Do not ship a remote HTTP MCP server that accepts a Grid API key and forwards
-  it to Core. MCP token passthrough is forbidden. Remote MCP requires a
-  short-lived, audience-bound Grid user token and server-side authorization in
-  Core; until that lands, stdio is the supported MCP transport.
+- The remote HTTP MCP server accepts only short-lived, audience-bound Grid user
+  tokens. It introspects through a separate `grid-mcp` service key carrying
+  only `oauth.introspect`, requires `account.read` plus `inference.submit`, and
+  forwards the same user token to Core. Never add durable API-key passthrough,
+  service-account inference, identity assertions, or refresh-token storage.
+- Keep the remote process bound to loopback and expose only `/v1/mcp` through
+  the trusted API reverse proxy. Preserve exact issuer/audience checks, Host and
+  Origin guards, bounded bodies, no-store auth errors, and fail-closed
+  introspection behavior.
 - npm releases come only from a matching `mcp-vX.Y.Z` tag through the pinned
   OIDC publication workflow. `0.1.1` is public; source `0.2.0` must remain
-  unpublished until the supervised OAuth rollout passes. Do not restore the
-  revoked bootstrap token or a repository `NPM_TOKEN` secret.
+  unpublished until the supervised OAuth and remote-MCP rollout passes. Do not
+  restore the revoked bootstrap token or a repository `NPM_TOKEN` secret.
 - Keep the skill concise enough to load as one operational reference. Move large
   protocol references out only when the body approaches the skill context limit.
 

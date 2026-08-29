@@ -4,3 +4,5 @@
 export * from "./auth.js";
 export * from "./client.js";
 export * from "./mcp.js";
+export * from "./remote-auth.js";
+export * from "./remote.js";
