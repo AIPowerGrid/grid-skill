@@ -1,45 +1,57 @@
 # Remote MCP rollout status
 
 Status snapshot: 2026-08-30. This file records reviewed operator evidence; the
-machine-checkable preflight remains the authority for current health.
+machine-checkable live verifier remains the authority for current health.
 
-## Dark deployment complete
+## Production live
 
-- Core release `931ff4cd` is deployed with Alembic `0031` at head and
-  `GRID_MCP_OAUTH_ENABLED` unset, which means disabled. Its versioned Nginx
-  base proxies only the two exact OAuth discovery routes; both still return
-  `404` while the gate is off.
-- Grid Skill commit `44cb9c41c6d75edd5cdb761f0e5de549d62a93c1` is installed as an
-  immutable production release after its 55 tests, build, package dry run, and
-  zero-vulnerability audit passed on the host.
-- The runtime is the checksum-verified official Node.js `v22.22.0` Linux x64
-  distribution. Its source URL and SHA-256 digest are recorded on the host.
-- A dedicated unprivileged `aipg-mcp` service runs the MCP process on loopback.
-  The service key is held in a protected root-owned environment file and has
-  only the `oauth.introspect` scope.
-- Nginx exposes only the exact `/v1/mcp` route through the reviewed
-  `/etc/nginx/aipg-api.d/mcp.conf` overlay. MCP health remains private, and
-  unrelated `/.well-known/*` paths remain outside Core routing.
-- The dark preflight returned `ready_dark`: private health was ready, the public
-  route returned the no-store bearer challenge, public health stayed hidden,
-  and OAuth discovery and registration stayed disabled.
+- Core release `4e744feed6e20f6d866a891ebf9b96f34feae376` is deployed with
+  `GRID_MCP_OAUTH_ENABLED=1`. OAuth discovery, dynamic public-client
+  registration, S256 PKCE, Console consent, 15-minute user tokens, and the
+  exact public MCP route are live.
+- Grid Skill runtime release `6e03fa95718d39b13b2da5623cb8803d220d334a`
+  runs as the unprivileged loopback-only `aipg-mcp` service on the official
+  checksum-verified Node.js `v22.22.0` Linux x64 runtime.
+- The protected root-owned MCP environment contains one service key carrying
+  only `oauth.introspect`. Public Nginx exposes only `/v1/mcp`; MCP health stays
+  private and public `/v1/oauth/introspect` returns an exact `404`.
+- The supervised Google-backed authorization issued only `account.read` and
+  `inference.submit`, returned to an ephemeral loopback callback, and produced
+  a token with no refresh token and a 15-minute lifetime.
+- `npm run deploy:verify-live` passed seven-tool discovery, credit inspection,
+  quote, 20 same-token requests, immediate SSE response headers, and one
+  explicit 16-token paid text call below the `$0.03` canary ceiling.
+- Separate protocol probes rejected a wrong redirect, plain PKCE, a wrong
+  resource, an invalid code, and oversized registration. Ninety-six concurrent
+  distinct invalid tokens all returned no-store `401` responses within one
+  second wall time.
+- The canary found and closed two integration defects before release: Core
+  introspection now publishes the canonical public OAuth issuer, and disabling
+  OAuth keeps private service-authenticated introspection available solely to
+  return `active: false`.
+- The rollback drill proved that the same previously valid user token receives
+  a no-store `401` after the gate is disabled and becomes usable again only
+  after a supervised re-enable. Ordinary Grid API keys were unaffected.
 
-## Still gated
+## Ongoing obligations
 
-- Load-test Core introspection and MCP authorization at the intended concurrency.
-- Enable OAuth only for an isolated supervised production canary.
-- Prove registration, consent approval and denial, S256 PKCE, one-use code
-  redemption, wrong verifier, wrong redirect, expiry, revocation, charging, and
-  one bounded paid MCP tool call.
-- Verify immediate SSE headers and 15-second keepalives through the public edge
-  during a deliberately delayed authenticated tool call.
-- Review telemetry and database growth, then decide whether to enable the public
-  authorization flow.
-- Publish npm `0.2.0` and public remote-MCP client instructions only after every
-  gate above passes.
+- Monitor authorization failures, rate limits, registration growth, MCP
+  latency, and introspection pressure. Never log tokens, account identifiers,
+  prompts, outputs, balances, or service credentials.
+- Repeat the authenticated live verifier and the off/on rollback drill after
+  changes to Core OAuth, Console consent, the MCP runtime, or edge routing.
+- Keep generation confirmation in MCP annotations: discovery, credits, and
+  quotes are read-only; text, image, video, and audio tools are paid and
+  non-idempotent.
+- Treat provider/client compatibility as observed evidence, not a universal
+  claim. Local stdio MCP with a scoped key remains the fallback for clients
+  that do not support remote OAuth.
 
 ## Rollback
 
-Keep OAuth disabled to invalidate all remote-MCP user tokens without affecting
-ordinary API keys. If the dark process or proxy misbehaves, remove the exact
-Nginx location, stop `aipg-mcp.service`, and revoke the `grid-mcp` service key.
+Set `GRID_MCP_OAUTH_ENABLED=0` and restart Core. Within the MCP verifier's
+five-second positive-cache ceiling, all remote user tokens become inactive and
+clients receive a no-store `401`; ordinary API keys and first-party service
+delegation continue to work. If the MCP process or proxy itself misbehaves,
+remove the exact Nginx location, stop `aipg-mcp.service`, and revoke only the
+`grid-mcp` introspection key.

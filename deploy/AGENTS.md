@@ -28,7 +28,8 @@ resource. These files are source artifacts, not proof that the service is live.
 - The Node process binds only to loopback. Nginx exposes only `/v1/mcp`; it must
   not expose `/healthz` or a general loopback proxy.
 - Keep Core OAuth disabled until migration, Console consent, service-key,
-  reverse-proxy, and supervised canary gates are ready.
+  reverse-proxy, and supervised canary gates pass. Once enabled, every Core or
+  MCP release must repeat the authenticated live verifier and rollback drill.
 - Preserve the split between the public OAuth issuer/resource origin and
   `AIPG_MCP_CORE_INTERNAL_URL`. The internal URL is transport-only.
 - Preserve immediate SSE response mode, 15-second keepalives, disabled nginx
