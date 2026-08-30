@@ -5,36 +5,21 @@
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 
 import { logoutOAuth, oauthLogin, resolveGridCredential } from "./auth.js";
+import {
+  parseCliArgs,
+  type CliFlags,
+  validateCliInvocation,
+} from "./cli-options.js";
 import { GridClient, type JsonObject, type Modality } from "./client.js";
 import { createGridMcpServer } from "./mcp.js";
 
-type Flags = Record<string, string | boolean>;
-
-function parseArgs(args: string[]): { command: string | undefined; flags: Flags } {
-  const [command, ...rest] = args;
-  const flags: Flags = {};
-  for (let index = 0; index < rest.length; index += 1) {
-    const token = rest[index];
-    if (!token?.startsWith("--")) throw new Error(`Unexpected argument: ${token ?? ""}`);
-    const name = token.slice(2).replaceAll("-", "_");
-    const value = rest[index + 1];
-    if (!value || value.startsWith("--")) {
-      flags[name] = true;
-    } else {
-      flags[name] = value;
-      index += 1;
-    }
-  }
-  return { command, flags };
-}
-
-function stringFlag(flags: Flags, name: string, required = false): string | undefined {
+function stringFlag(flags: CliFlags, name: string, required = false): string | undefined {
   const value = flags[name];
   if (required && typeof value !== "string") throw new Error(`--${name.replaceAll("_", "-")} is required`);
   return typeof value === "string" ? value : undefined;
 }
 
-function numberFlag(flags: Flags, name: string): number | undefined {
+function numberFlag(flags: CliFlags, name: string): number | undefined {
   const raw = stringFlag(flags, name);
   if (raw === undefined) return undefined;
   const value = Number(raw);
@@ -75,7 +60,8 @@ async function authenticatedClient(): Promise<GridClient> {
 }
 
 async function main(): Promise<void> {
-  const { command, flags } = parseArgs(process.argv.slice(2));
+  const { command, flags } = parseCliArgs(process.argv.slice(2));
+  validateCliInvocation(command, flags);
   if (!command || command === "help" || flags.help) return help();
   if (command === "login") {
     const session = await oauthLogin({
@@ -158,7 +144,7 @@ async function main(): Promise<void> {
       }) as unknown as Parameters<GridClient["generateAudio"]>[0]);
       break;
     default:
-      throw new Error(`Unknown command: ${command}`);
+      throw new Error(`Unsupported command state: ${command}`);
   }
   console.log(JSON.stringify(output, null, 2));
 }
