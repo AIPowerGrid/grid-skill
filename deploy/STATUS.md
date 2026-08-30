@@ -5,8 +5,10 @@ machine-checkable preflight remains the authority for current health.
 
 ## Dark deployment complete
 
-- Core release `8c9c0e81` is deployed with Alembic `0031` at head and
-  `GRID_MCP_OAUTH_ENABLED` unset, which means disabled.
+- Core release `931ff4cd` is deployed with Alembic `0031` at head and
+  `GRID_MCP_OAUTH_ENABLED` unset, which means disabled. Its versioned Nginx
+  base proxies only the two exact OAuth discovery routes; both still return
+  `404` while the gate is off.
 - Grid Skill commit `44cb9c41c6d75edd5cdb761f0e5de549d62a93c1` is installed as an
   immutable production release after its 55 tests, build, package dry run, and
   zero-vulnerability audit passed on the host.
@@ -15,7 +17,9 @@ machine-checkable preflight remains the authority for current health.
 - A dedicated unprivileged `aipg-mcp` service runs the MCP process on loopback.
   The service key is held in a protected root-owned environment file and has
   only the `oauth.introspect` scope.
-- Nginx exposes only the exact `/v1/mcp` route. MCP health remains private.
+- Nginx exposes only the exact `/v1/mcp` route through the reviewed
+  `/etc/nginx/aipg-api.d/mcp.conf` overlay. MCP health remains private, and
+  unrelated `/.well-known/*` paths remain outside Core routing.
 - The dark preflight returned `ready_dark`: private health was ready, the public
   route returned the no-store bearer challenge, public health stayed hidden,
   and OAuth discovery and registration stayed disabled.
