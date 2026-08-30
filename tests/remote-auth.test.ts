@@ -126,12 +126,14 @@ describe("Grid OAuth token introspection", () => {
     );
     const tokenVerifier = verifier(fetchMock);
 
-    const first = tokenVerifier.verifyAccessToken(USER_TOKEN);
-    const second = tokenVerifier.verifyAccessToken(USER_TOKEN);
+    const checks = Array.from(
+      { length: 200 },
+      () => tokenVerifier.verifyAccessToken(USER_TOKEN),
+    );
     expect(fetchMock).toHaveBeenCalledTimes(1);
     resolveIntrospection(new Response(JSON.stringify(active())));
 
-    await expect(Promise.all([first, second])).resolves.toHaveLength(2);
+    await expect(Promise.all(checks)).resolves.toHaveLength(200);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
