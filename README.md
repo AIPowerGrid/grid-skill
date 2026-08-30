@@ -118,12 +118,15 @@ has set a budget or has not already approved the spend.
 
 ### Remote MCP rollout
 
-Source `0.2.0` includes the remote Streamable HTTP resource, but it is not
-deployed or public yet. It accepts only Core-issued, 15-minute, audience-bound
-user tokens. The server authenticates each MCP HTTP request through Core's
-introspection endpoint, requires both `account.read` and `inference.submit`,
-and forwards that same user token to Grid. It never accepts or relays a durable
-Grid API key.
+Source `0.2.0` includes the remote Streamable HTTP resource. Its loopback
+process and exact public reverse-proxy route were deployed dark on 2026-08-30,
+but it is not a usable public product while Core OAuth remains disabled. An
+unauthenticated request receives the intended OAuth bearer challenge; discovery,
+registration, authorization, and token issuance remain unavailable. Once
+enabled, it accepts only Core-issued, 15-minute, audience-bound user tokens.
+The server authenticates each MCP HTTP request through Core's introspection
+endpoint, requires both `account.read` and `inference.submit`, and forwards that
+same user token to Grid. It never accepts or relays a durable Grid API key.
 
 The process is intentionally loopback-only and belongs behind the trusted
 `api.aipowergrid.io` reverse proxy:
@@ -136,7 +139,8 @@ export AIPG_MCP_PORT="8788"
 aipg-mcp-http
 ```
 
-The public route will be `https://api.aipowergrid.io/v1/mcp`. The local
+The reserved dark route is `https://api.aipowergrid.io/v1/mcp`. Do not configure
+clients against it until the supervised rollout closes. The local
 `/healthz` response contains only `{"status":"ok"}`. Host and Origin guards,
 a 256 KiB request limit, bounded introspection responses, exact issuer/audience
 checks, strict scope enforcement, and fail-closed upstream errors are part of
@@ -147,9 +151,10 @@ protected-resource metadata, and the public MCP resource remain pinned to
 `https://api.aipowergrid.io`.
 
 Do not run this command with an ordinary Grid key. Provision `grid-mcp` with
-only `oauth.introspect`, store it in the server secret store, and keep the
-reverse-proxy route dark until Core migration `0031`, Console consent, OAuth
-canary, charging, expiry, denial, and revocation tests all pass.
+only `oauth.introspect` and store it in the server secret store. Keep Core OAuth
+disabled, and do not publish the client setup, until the Console consent, OAuth
+canary, charging, expiry, denial, revocation, and load-test gates all pass. See
+[`deploy/STATUS.md`](./deploy/STATUS.md) for the non-secret rollout snapshot.
 
 ## Portable skill
 

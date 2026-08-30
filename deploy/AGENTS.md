@@ -13,6 +13,7 @@ resource. These files are source artifacts, not proof that the service is live.
 - `verify-dark.mjs` - read-only, fail-closed verification of private health,
   the public bearer challenge, hidden health, and disabled OAuth routes.
 - `README.md` - staged rollout, verification, and rollback procedure.
+- `STATUS.md` - non-secret production rollout snapshot and remaining gates.
 
 ## Local Contracts
 
@@ -34,5 +35,7 @@ resource. These files are source artifacts, not proof that the service is live.
 - `npm test` validates the systemd, nginx, secret-file, and runbook contracts.
 - `npm run deploy:verify-dark` checks an installed dark deployment without a
   credential or generation request.
+- Keep `STATUS.md` aligned with verified production state; never infer liveness
+  from source files alone.
 - `systemd-analyze verify deploy/aipg-mcp.service` on Linux before installation.
 - `nginx -t` after placing the location inside the production API server block.
