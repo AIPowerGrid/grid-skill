@@ -24,6 +24,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-
 export interface GridTokenVerifierOptions {
   serviceKey?: string;
   coreBaseUrl?: string;
+  coreTransportUrl?: string;
   fetch?: typeof globalThis.fetch;
   timeoutMs?: number;
   now?: () => number;
@@ -91,13 +92,18 @@ function parseScopes(value: unknown): string[] {
 export class GridTokenVerifier implements OAuthTokenVerifier {
   private readonly key: string;
   private readonly coreBaseUrl: string;
+  private readonly coreTransportUrl: string;
   private readonly fetchImpl: typeof globalThis.fetch;
   private readonly timeoutMs: number;
   private readonly now: () => number;
 
   constructor(options: GridTokenVerifierOptions = {}) {
     this.key = serviceKey(options.serviceKey);
-    this.coreBaseUrl = normalizeBaseUrl(options.coreBaseUrl ?? GRID_ORIGIN);
+    this.coreBaseUrl = normalizeBaseUrl(options.coreBaseUrl ?? GRID_ORIGIN, "AIPG_MCP_CORE_BASE_URL");
+    this.coreTransportUrl = normalizeBaseUrl(
+      options.coreTransportUrl ?? this.coreBaseUrl,
+      "AIPG_MCP_CORE_INTERNAL_URL",
+    );
     this.fetchImpl = options.fetch ?? globalThis.fetch;
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.now = options.now ?? Date.now;
@@ -108,7 +114,7 @@ export class GridTokenVerifier implements OAuthTokenVerifier {
 
     let response: Response;
     try {
-      response = await this.fetchImpl(`${this.coreBaseUrl}/v1/oauth/introspect`, {
+      response = await this.fetchImpl(`${this.coreTransportUrl}/v1/oauth/introspect`, {
         method: "POST",
         headers: {
           Accept: "application/json",

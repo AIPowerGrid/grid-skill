@@ -4,7 +4,14 @@
 export const GRID_ORIGIN = "https://api.aipowergrid.io";
 
 const MAX_ERROR_BODY = 2_000;
-const DEFAULT_TIMEOUT_MS = 5 * 60_000;
+
+export const GRID_REQUEST_TIMEOUTS_MS = {
+  default: 30_000,
+  text: 330_000,
+  image: 330_000,
+  video: 630_000,
+  audio: 1_950_000,
+} as const;
 
 export type JsonObject = Record<string, unknown>;
 export type Modality = "text" | "image" | "video" | "audio" | "3d";
@@ -68,12 +75,15 @@ export interface AudioRequest {
   seed?: number | undefined;
 }
 
-export function normalizeBaseUrl(value: string | undefined): string {
+export function normalizeBaseUrl(value: string | undefined, variableName = "GRID_BASE_URL"): string {
   const candidate = (value || GRID_ORIGIN).replace(/\/+$/, "");
   const parsed = new URL(candidate);
   const isLoopback = parsed.hostname === "127.0.0.1" || parsed.hostname === "localhost" || parsed.hostname === "::1";
   if (candidate !== GRID_ORIGIN && !isLoopback) {
-    throw new Error(`GRID_BASE_URL must be ${GRID_ORIGIN} or a loopback test URL`);
+    throw new Error(`${variableName} must be ${GRID_ORIGIN} or a loopback URL`);
+  }
+  if (isLoopback && parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error(`${variableName} loopback URLs must use HTTP or HTTPS`);
   }
   if (candidate === GRID_ORIGIN && parsed.protocol !== "https:") {
     throw new Error("The production Grid API requires HTTPS");
@@ -103,13 +113,13 @@ export class GridClient {
   readonly baseUrl: string;
   private readonly credential: string | undefined;
   private readonly fetchImpl: typeof globalThis.fetch;
-  private readonly timeoutMs: number;
+  private readonly timeoutMs: number | undefined;
 
   constructor(options: GridClientOptions = {}) {
     this.baseUrl = normalizeBaseUrl(options.baseUrl ?? process.env.GRID_BASE_URL);
     this.credential = options.apiKey ?? options.accessToken ?? process.env.GRID_API_KEY ?? process.env.GRID_ACCESS_TOKEN;
     this.fetchImpl = options.fetch ?? globalThis.fetch;
-    this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.timeoutMs = options.timeoutMs;
   }
 
   async listModels(): Promise<JsonObject> {
@@ -138,25 +148,25 @@ export class GridClient {
       max_tokens: input.max_tokens ?? 1_024,
       temperature: input.temperature,
       stream: false,
-    }));
+    }), true, GRID_REQUEST_TIMEOUTS_MS.text);
   }
 
   async generateImage(input: ImageRequest): Promise<JsonObject> {
     return this.request("POST", "/v1/images/generations", omitUndefined({
       ...input,
       response_format: "url",
-    }));
+    }), true, GRID_REQUEST_TIMEOUTS_MS.image);
   }
 
   async generateVideo(input: VideoRequest): Promise<JsonObject> {
     return this.request("POST", "/v1/videos/generations", omitUndefined({
       ...input,
       response_format: "url",
-    }));
+    }), true, GRID_REQUEST_TIMEOUTS_MS.video);
   }
 
   async generateAudio(input: AudioRequest): Promise<JsonObject> {
-    return this.request("POST", "/v1/audio/generations", omitUndefined(input));
+    return this.request("POST", "/v1/audio/generations", omitUndefined(input), true, GRID_REQUEST_TIMEOUTS_MS.audio);
   }
 
   private async request<T extends JsonObject>(
@@ -164,6 +174,7 @@ export class GridClient {
     path: string,
     body?: JsonObject,
     authenticated = true,
+    timeoutMs: number = GRID_REQUEST_TIMEOUTS_MS.default,
   ): Promise<T> {
     if (authenticated && !this.credential) {
       throw new GridApiError(
@@ -180,7 +191,7 @@ export class GridClient {
         method,
         headers,
         redirect: "error",
-        signal: AbortSignal.timeout(this.timeoutMs),
+        signal: AbortSignal.timeout(this.timeoutMs ?? timeoutMs),
       };
       if (body) init.body = JSON.stringify(body);
       const response = await this.fetchImpl(`${this.baseUrl}${path}`, init);

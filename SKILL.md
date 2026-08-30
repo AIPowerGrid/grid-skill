@@ -177,7 +177,7 @@ seconds) — either hold the connection, or poll with a `progress_token`.
 
 ### Synchronous (blocks until done)
 ```bash
-curl -s --max-time 180 -X POST "$GRID_BASE_URL/v1/videos/generations" \
+curl -s --max-time 660 -X POST "$GRID_BASE_URL/v1/videos/generations" \
   -H "apikey: $GRID_API_KEY" -H "Content-Type: application/json" \
   -d '{"model":"LTX-2.3","prompt":"a slow pan over a neon city at night","seconds":4,"fps":24,"size":"768x512"}'
 # → {"data":[{"url":"https://media.aipg.art/video/<id>/0.mp4","seed":…}], "grid":{…}}
@@ -213,7 +213,7 @@ via TRELLIS. There is **no prompt** — it's image-conditioned only. It's **slow
 
 ```bash
 IMG="data:image/png;base64,$(base64 -i photo.png)"
-curl -s --max-time 300 -X POST "$GRID_BASE_URL/v1/3d/generations" \
+curl -s --max-time 960 -X POST "$GRID_BASE_URL/v1/3d/generations" \
   -H "apikey: $GRID_API_KEY" -H "Content-Type: application/json" \
   -d "{\"model\":\"TRELLIS2\",\"image\":\"$IMG\"}"
 # → {"data":[{"url":"https://media.aipg.art/.../0.glb","seed":…}],
@@ -273,7 +273,7 @@ Generate WAV audio at `POST /v1/audio/generations`. Discover the currently
 online model before naming one; omit `model` to use Core's governed default.
 
 ```bash
-curl -s --max-time 360 -X POST "$GRID_BASE_URL/v1/audio/generations" \
+curl -s --max-time 1980 -X POST "$GRID_BASE_URL/v1/audio/generations" \
   -H "apikey: $GRID_API_KEY" -H "Content-Type: application/json" \
   -d '{"prompt":"hopeful instrumental post-rock, clean guitars, steady drums","seconds":30,"bpm":96,"key_scale":"A minor"}'
 # -> {"data":[{"url":"https://media.aipg.art/.../0.wav","seed":...}],"grid":{...}}

@@ -29,6 +29,7 @@ describe("remote MCP deployment contract", () => {
     ]) expect(unit).toContain(hardening);
     expect(unit).not.toMatch(/AIPG_MCP_SERVICE_KEY=/);
     expect(env).toMatch(/^AIPG_MCP_SERVICE_KEY=$/m);
+    expect(env).toMatch(/^AIPG_MCP_CORE_INTERNAL_URL=http:\/\/127\.0\.0\.1:7010$/m);
     expect(env).not.toMatch(/grid_[A-Za-z0-9_-]{28,}/);
   });
 
@@ -39,6 +40,8 @@ describe("remote MCP deployment contract", () => {
     expect(nginx).toMatch(/^\s+client_max_body_size 256k;$/m);
     expect(nginx).toMatch(/^\s+proxy_pass http:\/\/127\.0\.0\.1:8788;$/m);
     expect(nginx).toMatch(/^\s+proxy_buffering off;$/m);
+    expect(nginx).toMatch(/^\s+proxy_read_timeout 60s;$/m);
+    expect(nginx).toContain("emits a keepalive every 15s");
     expect(nginx).toMatch(/^\s+proxy_set_header Authorization \$http_authorization;$/m);
     expect(nginx).not.toMatch(/location\s+.*healthz/);
   });
@@ -51,6 +54,8 @@ describe("remote MCP deployment contract", () => {
     expect(runbook).toContain("Node.js 22 LTS");
     expect(runbook).toContain("do not use a `curl | sh` installer");
     expect(runbook).toContain("S256 PKCE");
+    expect(runbook).toContain("AIPG_MCP_CORE_INTERNAL_URL=http://127.0.0.1:7010");
+    expect(runbook).toContain("text/event-stream");
     expect(runbook).toContain("one-use code redemption");
     expect(runbook).toContain("Set `GRID_MCP_OAUTH_ENABLED=0`");
     expect(runbook).toContain("Do not delete audit or OAuth tables");

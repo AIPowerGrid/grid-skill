@@ -3,7 +3,12 @@
 
 import { describe, expect, it, vi } from "vitest";
 
-import { GridApiError, GridClient, extractMediaUrls } from "../src/client.js";
+import {
+  GRID_REQUEST_TIMEOUTS_MS,
+  GridApiError,
+  GridClient,
+  extractMediaUrls,
+} from "../src/client.js";
 
 function jsonResponse(value: unknown, status = 200): Response {
   return new Response(JSON.stringify(value), {
@@ -91,6 +96,44 @@ describe("GridClient", () => {
     expect(extractMediaUrls(response)).toEqual(["https://media.aipg.art/image/one.webp"]);
   });
 
+  it("uses Core-aligned deadlines with headroom for every generation modality", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async () => jsonResponse({ data: [] }));
+    const timeout = vi.spyOn(AbortSignal, "timeout");
+    const client = new GridClient({
+      apiKey: "grid_test_key",
+      baseUrl: "http://127.0.0.1:9999",
+      fetch: fetchMock,
+    });
+
+    await client.generateText({ prompt: "hello" });
+    await client.generateImage({ prompt: "a cube" });
+    await client.generateVideo({ prompt: "a moving cube" });
+    await client.generateAudio({ prompt: "a short motif" });
+
+    expect(timeout.mock.calls.map(([milliseconds]) => milliseconds)).toEqual([
+      GRID_REQUEST_TIMEOUTS_MS.text,
+      GRID_REQUEST_TIMEOUTS_MS.image,
+      GRID_REQUEST_TIMEOUTS_MS.video,
+      GRID_REQUEST_TIMEOUTS_MS.audio,
+    ]);
+    timeout.mockRestore();
+  });
+
+  it("keeps timeoutMs as an explicit all-request override", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({ data: [] }));
+    const timeout = vi.spyOn(AbortSignal, "timeout");
+    const client = new GridClient({
+      apiKey: "grid_test_key",
+      baseUrl: "http://127.0.0.1:9999",
+      fetch: fetchMock,
+      timeoutMs: 1_234,
+    });
+
+    await client.generateAudio({ prompt: "a short motif" });
+    expect(timeout).toHaveBeenLastCalledWith(1_234);
+    timeout.mockRestore();
+  });
+
   it("never leaks a key through API or transport errors", async () => {
     const secret = "grid_super_secret_value";
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({ detail: `bad ${secret}` }, 401));
@@ -111,5 +154,6 @@ describe("GridClient", () => {
 
   it("rejects arbitrary alternate API origins", () => {
     expect(() => new GridClient({ baseUrl: "https://attacker.example" })).toThrow("must be");
+    expect(() => new GridClient({ baseUrl: "ftp://localhost/core" })).toThrow("HTTP or HTTPS");
   });
 });

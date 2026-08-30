@@ -17,6 +17,7 @@ import { GridTokenVerifier } from "./remote-auth.js";
 
 export const MCP_PATH = "/v1/mcp";
 export const MCP_MAX_REQUEST_BYTES = 256 * 1024;
+export const MCP_SSE_KEEPALIVE_MS = 15_000;
 export const MCP_REQUIRED_SCOPES = ["account.read", "inference.submit"] as const;
 
 const DEFAULT_ALLOWED_HOSTNAMES = ["api.aipowergrid.io", "127.0.0.1", "localhost", "[::1]"];
@@ -25,9 +26,11 @@ const DEFAULT_ALLOWED_ORIGINS = ["api.aipowergrid.io", "console.aipowergrid.io",
 export interface RemoteMcpServerOptions {
   serviceKey?: string;
   coreBaseUrl?: string;
+  coreTransportUrl?: string;
   fetch?: typeof globalThis.fetch;
   gridFetch?: typeof globalThis.fetch;
   introspectionTimeoutMs?: number;
+  sseKeepAliveMs?: number;
   allowedHostnames?: string[];
   allowedOriginHostnames?: string[];
   onerror?: (error: Error) => void;
@@ -117,10 +120,19 @@ function requireAuthInfo(authInfo: AuthInfo | undefined): AuthInfo {
 }
 
 export function createRemoteMcpHttpServer(options: RemoteMcpServerOptions = {}): Server {
-  const coreBaseUrl = normalizeBaseUrl(options.coreBaseUrl ?? GRID_ORIGIN);
+  const coreBaseUrl = normalizeBaseUrl(options.coreBaseUrl ?? GRID_ORIGIN, "AIPG_MCP_CORE_BASE_URL");
+  const coreTransportUrl = normalizeBaseUrl(
+    options.coreTransportUrl ?? coreBaseUrl,
+    "AIPG_MCP_CORE_INTERNAL_URL",
+  );
+  const sseKeepAliveMs = options.sseKeepAliveMs ?? MCP_SSE_KEEPALIVE_MS;
+  if (!Number.isInteger(sseKeepAliveMs) || sseKeepAliveMs < 1 || sseKeepAliveMs > 60_000) {
+    throw new Error("sseKeepAliveMs must be an integer from 1 through 60000");
+  }
   const verifierOptions = {
     ...(options.serviceKey === undefined ? {} : { serviceKey: options.serviceKey }),
     coreBaseUrl,
+    coreTransportUrl,
     ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
     ...(options.introspectionTimeoutMs === undefined ? {} : { timeoutMs: options.introspectionTimeoutMs }),
   };
@@ -136,12 +148,16 @@ export function createRemoteMcpHttpServer(options: RemoteMcpServerOptions = {}):
     const auth = requireAuthInfo(context.authInfo);
     return createGridMcpServer(new GridClient({
       accessToken: auth.token,
-      baseUrl: coreBaseUrl,
+      baseUrl: coreTransportUrl,
       ...(options.gridFetch === undefined && options.fetch === undefined
         ? {}
         : { fetch: options.gridFetch ?? options.fetch }),
     }));
-  }, { onerror: report });
+  }, {
+    onerror: report,
+    responseMode: "sse",
+    keepAliveMs: sseKeepAliveMs,
+  });
 
   const nodeHandler = toNodeHandler(mcp, { onerror: report });
   const validateHost = hostHeaderValidation(options.allowedHostnames ?? DEFAULT_ALLOWED_HOSTNAMES);

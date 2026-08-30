@@ -22,7 +22,10 @@ function hostFromEnvironment(): string {
 
 const port = portFromEnvironment();
 const host = hostFromEnvironment();
-const server = createRemoteMcpHttpServer();
+const coreTransportUrl = process.env.AIPG_MCP_CORE_INTERNAL_URL;
+const server = createRemoteMcpHttpServer({
+  ...(coreTransportUrl === undefined ? {} : { coreTransportUrl }),
+});
 
 server.listen(port, host, () => {
   console.error(`aipg-mcp-http: listening on http://${host}:${port}${MCP_PATH}`);

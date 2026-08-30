@@ -8,7 +8,8 @@ import { GridTokenVerifier } from "../src/remote-auth.js";
 
 const NOW_MS = 1_800_000_000_000;
 const NOW_SECONDS = Math.floor(NOW_MS / 1_000);
-const CORE = "http://127.0.0.1:9999";
+const CORE_ISSUER = "http://127.0.0.1:9999";
+const CORE_TRANSPORT = "http://127.0.0.1:7010";
 const SERVICE_KEY = `grid_${"s".repeat(32)}`;
 const USER_TOKEN = `gridu_${"u".repeat(80)}.${"v".repeat(43)}`;
 
@@ -17,10 +18,10 @@ function active(overrides: Record<string, unknown> = {}): Record<string, unknown
     active: true,
     client_id: `grid_oauth_${"c".repeat(32)}`,
     sub: "123e4567-e89b-42d3-a456-426614174000",
-    aud: CORE,
+    aud: CORE_ISSUER,
     scope: "account.read inference.submit",
     token_type: "Bearer",
-    iss: CORE,
+    iss: CORE_ISSUER,
     iat: NOW_SECONDS - 10,
     exp: NOW_SECONDS + 890,
     ...overrides,
@@ -30,7 +31,8 @@ function active(overrides: Record<string, unknown> = {}): Record<string, unknown
 function verifier(fetchImpl: typeof fetch): GridTokenVerifier {
   return new GridTokenVerifier({
     serviceKey: SERVICE_KEY,
-    coreBaseUrl: CORE,
+    coreBaseUrl: CORE_ISSUER,
+    coreTransportUrl: CORE_TRANSPORT,
     fetch: fetchImpl,
     now: () => NOW_MS,
   });
@@ -49,9 +51,9 @@ describe("Grid OAuth token introspection", () => {
       scopes: ["account.read", "inference.submit"],
       expiresAt: NOW_SECONDS + 890,
     });
-    expect(result.resource?.toString()).toBe(`${CORE}/`);
+    expect(result.resource?.toString()).toBe(`${CORE_ISSUER}/`);
     const [url, init] = fetchMock.mock.calls[0] ?? [];
-    expect(String(url)).toBe(`${CORE}/v1/oauth/introspect`);
+    expect(String(url)).toBe(`${CORE_TRANSPORT}/v1/oauth/introspect`);
     expect(new Headers(init?.headers).get("authorization")).toBe(`Bearer ${SERVICE_KEY}`);
     expect(String(init?.body)).toBe(`token=${USER_TOKEN}`);
     expect(init?.redirect).toBe("error");
