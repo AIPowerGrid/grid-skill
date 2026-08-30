@@ -110,6 +110,12 @@ value. The server exposes:
 - `aipg_generate_video`
 - `aipg_generate_audio`
 
+The discovery, credit, and quote tools are read-only. Every generation tool is
+marked as a paid, non-idempotent operation because it consumes Grid credits;
+MCP clients can therefore require confirmation instead of treating inference
+like a harmless read. Agents should call `aipg_quote` first whenever the user
+has set a budget or has not already approved the spend.
+
 ### Remote MCP rollout
 
 Source `0.2.0` includes the remote Streamable HTTP resource, but it is not

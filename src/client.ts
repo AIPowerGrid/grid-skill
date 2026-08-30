@@ -4,6 +4,7 @@
 export const GRID_ORIGIN = "https://api.aipowergrid.io";
 
 const MAX_ERROR_BODY = 2_000;
+export const GRID_MAX_RESPONSE_BYTES = 32 * 1024 * 1024;
 
 export const GRID_REQUEST_TIMEOUTS_MS = {
   default: 30_000,
@@ -97,6 +98,35 @@ function scrub(value: string, secret: string | undefined): string {
 
 function omitUndefined<T extends object>(value: T): JsonObject {
   return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined));
+}
+
+async function readBoundedText(response: Response, limit: number, label: string): Promise<string> {
+  const declared = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > limit) {
+    await response.body?.cancel();
+    throw new GridApiError(`${label} exceeded the ${limit}-byte response limit`, response.status);
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) return "";
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    received += value.byteLength;
+    if (received > limit) {
+      await reader.cancel();
+      throw new GridApiError(`${label} exceeded the ${limit}-byte response limit`, response.status);
+    }
+    chunks.push(value);
+  }
+
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks));
+  } catch {
+    throw new GridApiError(`${label} returned invalid UTF-8`, response.status);
+  }
 }
 
 export class GridApiError extends Error {
@@ -195,11 +225,11 @@ export class GridClient {
       };
       if (body) init.body = JSON.stringify(body);
       const response = await this.fetchImpl(`${this.baseUrl}${path}`, init);
-      const text = await response.text();
       if (!response.ok) {
-        const detail = scrub(text.slice(0, MAX_ERROR_BODY), this.credential);
+        const detail = scrub(await readBoundedText(response, MAX_ERROR_BODY, "Grid API error body"), this.credential);
         throw new GridApiError(`Grid API ${response.status} on ${path}${detail ? `: ${detail}` : ""}`, response.status);
       }
+      const text = await readBoundedText(response, GRID_MAX_RESPONSE_BYTES, "Grid API response");
       if (!text) return {} as T;
       try {
         return JSON.parse(text) as T;

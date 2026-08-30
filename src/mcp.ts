@@ -32,10 +32,17 @@ function toolError(error: unknown): CallToolResult {
   return { isError: true, content: [{ type: "text", text: message }] };
 }
 
-const annotations = {
+const paidGenerationAnnotations = {
   readOnlyHint: false,
-  destructiveHint: false,
+  destructiveHint: true,
   idempotentHint: false,
+  openWorldHint: true,
+};
+
+const readOnlyAnnotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
   openWorldHint: true,
 };
 
@@ -51,7 +58,7 @@ export function createGridMcpServer(client = new GridClient()): McpServer {
       title: "List AI Power Grid models",
       description: "List live text and media model availability and performance.",
       inputSchema: z.object({}),
-      annotations: { ...annotations, readOnlyHint: true, idempotentHint: true },
+      annotations: readOnlyAnnotations,
     },
     async () => {
       try { return result(await client.listModels()); } catch (error) { return toolError(error); }
@@ -64,7 +71,7 @@ export function createGridMcpServer(client = new GridClient()): McpServer {
       title: "Get Grid credits",
       description: "Read the current account's promotional, free, paid, and total spendable credits.",
       inputSchema: z.object({}),
-      annotations: { ...annotations, readOnlyHint: true, idempotentHint: true },
+      annotations: readOnlyAnnotations,
     },
     async () => {
       try { return result(await client.getCredits()); } catch (error) { return toolError(error); }
@@ -84,7 +91,7 @@ export function createGridMcpServer(client = new GridClient()): McpServer {
         n: z.number().int().min(1).max(16).optional(),
         seconds: z.number().positive().max(3_600).optional(),
       }),
-      annotations: { ...annotations, readOnlyHint: true, idempotentHint: true },
+      annotations: readOnlyAnnotations,
     },
     async (input) => {
       try { return result(await client.quote(input)); } catch (error) { return toolError(error); }
@@ -95,7 +102,7 @@ export function createGridMcpServer(client = new GridClient()): McpServer {
     "aipg_generate_text",
     {
       title: "Generate text",
-      description: "Run a non-streaming chat completion on AI Power Grid.",
+      description: "Run a paid non-streaming chat completion on AI Power Grid. This consumes Grid credits; quote first when a budget or confirmation is required.",
       inputSchema: z.object({
         prompt: z.string().min(1).max(200_000),
         model: z.string().min(1).max(256).optional(),
@@ -103,7 +110,7 @@ export function createGridMcpServer(client = new GridClient()): McpServer {
         max_tokens: z.number().int().min(1).max(1_000_000).optional(),
         temperature: z.number().min(0).max(2).optional(),
       }),
-      annotations,
+      annotations: paidGenerationAnnotations,
     },
     async (input) => {
       try { return result(await client.generateText(input)); } catch (error) { return toolError(error); }
@@ -114,7 +121,7 @@ export function createGridMcpServer(client = new GridClient()): McpServer {
     "aipg_generate_image",
     {
       title: "Generate an image",
-      description: "Generate one or more images and return shareable HTTPS media URLs.",
+      description: "Generate one or more paid images and return shareable HTTPS media URLs. This consumes Grid credits; quote first when a budget or confirmation is required.",
       inputSchema: z.object({
         prompt: z.string().min(1).max(100_000),
         model: z.string().min(1).max(256).optional(),
@@ -124,7 +131,7 @@ export function createGridMcpServer(client = new GridClient()): McpServer {
         negative_prompt: z.string().max(100_000).optional(),
         style: z.string().max(128).optional(),
       }),
-      annotations,
+      annotations: paidGenerationAnnotations,
     },
     async (input) => {
       try { return result(await client.generateImage(input), true); } catch (error) { return toolError(error); }
@@ -135,7 +142,7 @@ export function createGridMcpServer(client = new GridClient()): McpServer {
     "aipg_generate_video",
     {
       title: "Generate a video",
-      description: "Generate a video from text, optionally with a start image, and return shareable HTTPS URLs.",
+      description: "Generate a paid video from text, optionally with a start image, and return shareable HTTPS URLs. This consumes Grid credits; quote first when a budget or confirmation is required.",
       inputSchema: z.object({
         prompt: z.string().min(1).max(100_000),
         model: z.string().min(1).max(256).optional(),
@@ -146,7 +153,7 @@ export function createGridMcpServer(client = new GridClient()): McpServer {
         image: z.string().max(20_000_000).optional(),
         style: z.string().max(128).optional(),
       }),
-      annotations,
+      annotations: paidGenerationAnnotations,
     },
     async (input) => {
       try { return result(await client.generateVideo(input), true); } catch (error) { return toolError(error); }
@@ -157,7 +164,7 @@ export function createGridMcpServer(client = new GridClient()): McpServer {
     "aipg_generate_audio",
     {
       title: "Generate music or audio",
-      description: "Generate audio with ACE-Step controls and return shareable HTTPS URLs.",
+      description: "Generate paid audio with ACE-Step controls and return shareable HTTPS URLs. This consumes Grid credits; quote first when a budget or confirmation is required.",
       inputSchema: z.object({
         prompt: z.string().min(1).max(2_000),
         lyrics: z.string().max(20_000).optional(),
@@ -170,7 +177,7 @@ export function createGridMcpServer(client = new GridClient()): McpServer {
         vocal_language: z.string().regex(/^[a-zA-Z]{2}$/).optional(),
         seed: z.number().int().nonnegative().optional(),
       }),
-      annotations,
+      annotations: paidGenerationAnnotations,
     },
     async (input) => {
       try { return result(await client.generateAudio(input), true); } catch (error) { return toolError(error); }

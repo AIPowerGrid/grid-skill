@@ -62,6 +62,10 @@ text, image, video, audio, model discovery, quotes, and credit inspection.
 - Remote HTTP tool calls always start an SSE response with 15-second keepalives
   so long media generations remain active through the public edge. Keep nginx
   buffering disabled and test that headers arrive before the tool completes.
+- Mark generation tools as paid, non-idempotent, and economically destructive
+  in MCP annotations; model discovery, credit inspection, and quotes remain
+  read-only. Bound every upstream response before buffering it into an agent
+  process, including unsuccessful responses whose displayed detail is smaller.
 - Keep the remote process bound to loopback and expose only `/v1/mcp` through
   the trusted API reverse proxy. Preserve exact issuer/audience checks, Host and
   Origin guards, bounded bodies, no-store auth errors, and fail-closed
