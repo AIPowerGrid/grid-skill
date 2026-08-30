@@ -47,9 +47,10 @@ describe("remote MCP deployment contract", () => {
   });
 
   it("keeps enablement behind migration, dark-route, canary, and rollback gates", async () => {
-    const [runbook, packageJson] = await Promise.all([
+    const [runbook, packageJson, liveVerifier] = await Promise.all([
       read("deploy/README.md"),
       read("package.json"),
+      read("deploy/verify-live.mjs"),
     ]);
 
     expect(runbook).toContain("GRID_MCP_OAUTH_ENABLED=0");
@@ -66,6 +67,14 @@ describe("remote MCP deployment contract", () => {
     expect(JSON.parse(packageJson).scripts["deploy:verify-dark"]).toBe(
       "node deploy/verify-dark.mjs",
     );
+    expect(JSON.parse(packageJson).scripts["deploy:verify-live"]).toBe(
+      "node deploy/verify-live.mjs",
+    );
+    expect(liveVerifier).toContain("AIPG_MCP_ACCESS_TOKEN");
+    expect(liveVerifier).toContain("MAX_APPROVED_SPEND_USD = 0.03");
+    expect(liveVerifier).toContain("SAME_TOKEN_CONCURRENCY = 20");
+    expect(liveVerifier).toContain('max_tokens: 16');
+    expect(liveVerifier).not.toMatch(/process\.argv.*token/i);
     expect(runbook).toContain("Set `GRID_MCP_OAUTH_ENABLED=0`");
     expect(runbook).toContain("Do not delete audit or OAuth tables");
     expect(runbook).not.toMatch(/GRID_MCP_OAUTH_ENABLED=1/);
