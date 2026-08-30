@@ -65,8 +65,10 @@ introspection and long-running inference back out through Cloudflare.
 2. Run `systemd-analyze verify` against the installed unit.
 3. Start the service and verify `curl --fail http://127.0.0.1:8788/healthz`
    returns exactly `{"status":"ok"}`.
-4. Add `nginx-location.conf` inside the production API TLS server block and run
-   `nginx -t` before reload.
+4. After the Core Nginx template with its exact-route overlay include is
+   installed, create `/etc/nginx/aipg-api.d` as `0755 root:root` and install
+   `nginx-location.conf` as `/etc/nginx/aipg-api.d/mcp.conf` with mode `0644`.
+   Run `nginx -t` before reload. Do not hand-edit Core's versioned base site.
 5. Verify `/healthz` is not reachable through the public API origin.
 6. Start a deliberately delayed authenticated MCP call and verify the public
    response becomes `text/event-stream` within 20 seconds, with a comment
@@ -94,7 +96,8 @@ revocation, charging, and one bounded MCP tool call before publishing npm
 
 1. Set `GRID_MCP_OAUTH_ENABLED=0` and restart Core. Existing OAuth access tokens
    then fail introspection without affecting ordinary API keys.
-2. Remove the nginx exact location and reload only after `nginx -t` passes.
+2. Remove `/etc/nginx/aipg-api.d/mcp.conf` and reload only after `nginx -t`
+   passes.
 3. Stop and disable `aipg-mcp.service`.
 4. Revoke the `grid-mcp` service key. Do not delete audit or OAuth tables during
    an incident rollback.

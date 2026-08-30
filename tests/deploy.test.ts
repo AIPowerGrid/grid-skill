@@ -58,6 +58,8 @@ describe("remote MCP deployment contract", () => {
     expect(runbook).toContain("do not use a `curl | sh` installer");
     expect(runbook).toContain("S256 PKCE");
     expect(runbook).toContain("AIPG_MCP_CORE_INTERNAL_URL=http://127.0.0.1:7010");
+    expect(runbook).toContain("/etc/nginx/aipg-api.d/mcp.conf");
+    expect(runbook).toContain("Do not hand-edit Core's versioned base site");
     expect(runbook).toContain("text/event-stream");
     expect(runbook).toContain("one-use code redemption");
     expect(runbook).toContain("npm run deploy:verify-dark");
