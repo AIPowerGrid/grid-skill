@@ -1,8 +1,8 @@
 # Remote MCP rollout
 
-This procedure deploys the remote MCP process without enabling OAuth. It does
-not publish npm `0.2.0`, grant inference authority to a service account, or make
-the authorization flow live by itself.
+This procedure deploys the remote MCP process independently from the OAuth
+feature gate. It does not grant inference authority to a service account or
+make the authorization flow live by itself.
 
 ## Preconditions
 
@@ -35,7 +35,8 @@ the service. The systemd unit refuses to start when `/usr/bin/node` or the
 immutable release directory is missing.
 
 Point `/opt/aipg-mcp/current` at that exact release only after the checks pass.
-Do not install from a branch name or from unpublished npm `0.2.0`.
+Do not install from a branch name or an npm package that has not passed the
+tag-gated provenance release.
 
 ## Provision the introspection principal
 

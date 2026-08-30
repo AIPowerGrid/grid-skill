@@ -9,8 +9,8 @@ One small repo with four ways for agents and developers to use AI Power Grid:
 - **`aipg`** - CLI for models, quotes, credits, text, image, video, and audio.
 - **`aipg-mcp`** - local stdio Model Context Protocol server with the same
   capability surface and shareable media links.
-- **`aipg-mcp-http`** - staged remote Streamable HTTP MCP resource. It is dark
-  until the Core OAuth and Console consent rollout passes.
+- **`aipg-mcp-http`** - authenticated remote Streamable HTTP MCP resource at
+  `https://api.aipowergrid.io/v1/mcp`.
 
 Install the signed package from npm:
 
@@ -31,7 +31,7 @@ npm install --global @aipowergrid/mcp
 
 ## Authentication
 
-The published `0.1.x` package uses a durable scoped key. Open the
+For local stdio MCP and unattended automation, use a durable scoped key. Open the
 [authenticated API-key handoff](https://console.aipowergrid.io/?callbackUrl=%2Fdashboard%2Fapi-key),
 sign in with Google, GitHub, or a wallet, and create one. Keep the key in an
 environment variable or local secret store; do not paste it into an agent chat.
@@ -49,7 +49,7 @@ strict flag allowlists: `--api-key`, duplicate flags, misspelled flags, and
 flags belonging to another command are rejected before authentication or any
 network request.
 
-Version `0.2.0` is staged in source with native browser authorization:
+Version `0.2.0` adds native browser authorization for the CLI:
 
 ```bash
 aipg login
@@ -60,9 +60,8 @@ aipg logout
 It dynamically registers a public client, requires S256 PKCE, validates the
 loopback callback's state, issuer, and host, and stores only the 15-minute Grid
 user token in a mode-`0600` local session. There is no client secret or refresh
-token. Core and Console keep this flow dark until the supervised OAuth rollout
-passes, so the current npm release still requires `GRID_API_KEY`; do not publish
-`0.2.0` or describe browser login as live before that gate closes.
+token. `aipg logout` removes the local session. A `GRID_API_KEY` remains the
+explicit fallback for clients that cannot complete browser OAuth.
 
 ## CLI
 
@@ -116,14 +115,15 @@ MCP clients can therefore require confirmation instead of treating inference
 like a harmless read. Agents should call `aipg_quote` first whenever the user
 has set a budget or has not already approved the spend.
 
-### Remote MCP rollout
+### Remote MCP
 
-Source `0.2.0` includes the remote Streamable HTTP resource. Its loopback
-process and exact public reverse-proxy route were deployed dark on 2026-08-30,
-but it is not a usable public product while Core OAuth remains disabled. An
-unauthenticated request receives the intended OAuth bearer challenge; discovery,
-registration, authorization, and token issuance remain unavailable. Once
-enabled, it accepts only Core-issued, 15-minute, audience-bound user tokens.
+Use this URL in MCP clients that support remote Streamable HTTP plus OAuth 2.1:
+
+```text
+https://api.aipowergrid.io/v1/mcp
+```
+
+The resource accepts only Core-issued, 15-minute, audience-bound user tokens.
 The server authenticates each MCP HTTP request through Core's introspection
 endpoint, requires both `account.read` and `inference.submit`, and forwards that
 same user token to Grid. It never accepts or relays a durable Grid API key.
@@ -139,9 +139,7 @@ export AIPG_MCP_PORT="8788"
 aipg-mcp-http
 ```
 
-The reserved dark route is `https://api.aipowergrid.io/v1/mcp`. Do not configure
-clients against it until the supervised rollout closes. The local
-`/healthz` response contains only `{"status":"ok"}`. Host and Origin guards,
+The local `/healthz` response contains only `{"status":"ok"}`. Host and Origin guards,
 a 256 KiB request limit, bounded introspection responses, exact issuer/audience
 checks, strict scope enforcement, and fail-closed upstream errors are part of
 the server contract. Remote MCP responses use SSE with 15-second keepalives so
@@ -150,10 +148,11 @@ uses the loopback Core URL only as a transport; OAuth issuer, audience,
 protected-resource metadata, and the public MCP resource remain pinned to
 `https://api.aipowergrid.io`.
 
-Do not run this command with an ordinary Grid key. Provision `grid-mcp` with
+This process configuration is for Grid operators, not MCP users. Do not run it
+with an ordinary Grid key. Provision `grid-mcp` with
 only `oauth.introspect` and store it in the server secret store. Keep Core OAuth
-disabled, and do not publish the client setup, until the Console consent, OAuth
-canary, charging, expiry, denial, revocation, and load-test gates all pass. See
+behind its reviewed rollout gate, and repeat the live and rollback verifiers
+after changes to Core, Console auth, or MCP. See
 [`deploy/STATUS.md`](./deploy/STATUS.md) for the non-secret rollout snapshot.
 
 ## Portable skill
@@ -174,9 +173,7 @@ surface. All three call the same public API and keep Core as the source of truth
 
 ## Package release status
 
-`@aipowergrid/mcp@0.1.1` is the current public release. Source is bumped to
-unpublished `0.2.0` for the dark browser-authorization and remote-MCP rollout.
-Releases come
+`@aipowergrid/mcp@0.2.0` is the current public release. Releases come
 only from matching `mcp-vX.Y.Z` tags through GitHub Actions with npm provenance.
 The repository workflow is the package's npm Trusted Publisher; no long-lived
 npm publish token belongs in GitHub or on a developer workstation.
