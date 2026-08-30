@@ -30,7 +30,8 @@ describe("Grid MCP server", () => {
       fetch: vi.fn<typeof fetch>(),
     });
     const client = await connectedClient(grid);
-    const names = (await client.listTools()).tools.map((tool) => tool.name).sort();
+    const tools = (await client.listTools()).tools;
+    const names = tools.map((tool) => tool.name).sort();
     expect(names).toEqual([
       "aipg_generate_audio",
       "aipg_generate_image",
@@ -40,6 +41,19 @@ describe("Grid MCP server", () => {
       "aipg_list_models",
       "aipg_quote",
     ]);
+    for (const tool of tools) {
+      const paid = tool.name.startsWith("aipg_generate_");
+      expect(tool.annotations).toMatchObject({
+        readOnlyHint: !paid,
+        destructiveHint: paid,
+        idempotentHint: !paid,
+        openWorldHint: true,
+      });
+      if (paid) {
+        expect(tool.description).toContain("consumes Grid credits");
+        expect(tool.description).toContain("quote first");
+      }
+    }
   });
 
   it("returns structured output plus shareable media resource links", async () => {

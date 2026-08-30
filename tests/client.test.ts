@@ -4,6 +4,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  GRID_MAX_RESPONSE_BYTES,
   GRID_REQUEST_TIMEOUTS_MS,
   GridApiError,
   GridClient,
@@ -150,6 +151,45 @@ describe("GridClient", () => {
       expect(String(error)).not.toContain(secret);
       expect(error).toBeInstanceOf(GridApiError);
     }
+  });
+
+  it("rejects oversized success and error bodies before buffering them", async () => {
+    const success = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, {
+      status: 200,
+      headers: { "Content-Length": String(GRID_MAX_RESPONSE_BYTES + 1) },
+    }));
+    const successClient = new GridClient({
+      baseUrl: "http://127.0.0.1:9999",
+      fetch: success,
+    });
+    await expect(successClient.listModels()).rejects.toThrow("response limit");
+
+    const error = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, {
+      status: 502,
+      headers: { "Content-Length": "2001" },
+    }));
+    const errorClient = new GridClient({
+      apiKey: "grid_test_key",
+      baseUrl: "http://127.0.0.1:9999",
+      fetch: error,
+    });
+    await expect(errorClient.getCredits()).rejects.toThrow("error body exceeded");
+  });
+
+  it("rejects oversized chunked responses without trusting Content-Length", async () => {
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(GRID_MAX_RESPONSE_BYTES));
+        controller.enqueue(new Uint8Array(1));
+        controller.close();
+      },
+    });
+    const client = new GridClient({
+      apiKey: "grid_test_key",
+      baseUrl: "http://127.0.0.1:9999",
+      fetch: vi.fn<typeof fetch>().mockResolvedValue(new Response(stream)),
+    });
+    await expect(client.getCredits()).rejects.toThrow("response limit");
   });
 
   it("rejects arbitrary alternate API origins", () => {
