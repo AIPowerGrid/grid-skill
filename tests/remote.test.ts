@@ -103,6 +103,7 @@ describe("remote Grid MCP server", () => {
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }),
     });
     expect(response.status).toBe(401);
+    expect(response.headers.get("cache-control")).toBe("no-store");
     expect(response.headers.get("www-authenticate")).toContain(
       `resource_metadata="${CORE}/.well-known/oauth-protected-resource"`,
     );
@@ -121,6 +122,7 @@ describe("remote Grid MCP server", () => {
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }),
     });
     expect(response.status).toBe(403);
+    expect(response.headers.get("cache-control")).toBe("no-store");
     expect(response.headers.get("www-authenticate")).toContain("insufficient_scope");
     expect(response.headers.get("www-authenticate")).toContain("inference.submit");
   });

@@ -53,6 +53,9 @@ async function writeFetchResponse(res: ServerResponse, response: Response): Prom
   const headers: Record<string, string> = {};
   response.headers.forEach((value, name) => { headers[name] = value; });
   const body = Buffer.from(await response.arrayBuffer());
+  // Authentication responses can contain token validity and scope state. Do
+  // not let a proxy or user agent reuse them for a later request.
+  headers["cache-control"] = "no-store";
   headers["content-length"] = String(body.byteLength);
   res.writeHead(response.status, headers);
   res.end(body);
