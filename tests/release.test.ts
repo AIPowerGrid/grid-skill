@@ -8,9 +8,10 @@ const read = (path: string) => readFile(new URL(`../${path}`, import.meta.url), 
 
 describe("npm release contract", () => {
   it("publishes only from a matching tag with provenance", async () => {
-    const [workflow, packageJson] = await Promise.all([
+    const [workflow, packageJson, packageLock] = await Promise.all([
       read(".github/workflows/publish.yml"),
       read("package.json").then((value) => JSON.parse(value)),
+      read("package-lock.json").then((value) => JSON.parse(value)),
     ]);
 
     expect(packageJson.name).toBe("@aipowergrid/mcp");
@@ -19,6 +20,7 @@ describe("npm release contract", () => {
       "aipg-mcp": "dist/stdio.js",
       "aipg-mcp-http": "dist/http.js",
     });
+    expect(packageLock.packages[""].bin).toEqual(packageJson.bin);
     expect(packageJson.dependencies["@modelcontextprotocol/node"]).toBe("2.0.0");
     expect(workflow).toMatch(/tags:\s*\n\s+- "mcp-v\*\.\*\.\*"/);
     expect(workflow).toMatch(/expected="mcp-v\$\(node -p/);

@@ -22,6 +22,8 @@ text, image, video, audio, model discovery, quotes, and credit inspection.
 - `README.md` - human-facing setup, installation, and security boundaries.
 - `.github/workflows/` - repository checks plus the tag-gated npm provenance
   release for `@aipowergrid/mcp`.
+- `deploy/` - hardened systemd, nginx, protected-environment shape, and rollout
+  runbook for the loopback remote MCP process. Owned in its own `AGENTS.md`.
 
 ## Local Contracts
 
@@ -84,5 +86,5 @@ text, image, video, audio, model discovery, quotes, and credit inspection.
 
 ## Child DOX Index
 
-- None - runtime ownership is described above and the implementation remains
-  intentionally small.
+- [deploy/AGENTS.md](deploy/AGENTS.md) - production assets and dark rollout
+  contract for the remote MCP HTTP resource.
