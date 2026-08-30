@@ -28,6 +28,9 @@ resource. These files are source artifacts, not proof that the service is live.
   `AIPG_MCP_CORE_INTERNAL_URL`. The internal URL is transport-only.
 - Preserve immediate SSE response mode, 15-second keepalives, disabled nginx
   buffering, and a proxy read deadline longer than the keepalive interval.
+- Core introspection is loopback transport, not a public API. The Core Nginx
+  site must shadow `/v1/oauth/introspect` with an exact external `404`; the MCP
+  process calls Uvicorn directly through `AIPG_MCP_CORE_INTERNAL_URL`.
 - Use an exact reviewed commit already on `main`; never deploy a mutable branch
   name or an npm package version that has not passed the release gate.
 

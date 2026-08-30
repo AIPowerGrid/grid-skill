@@ -58,6 +58,9 @@ Set `AIPG_MCP_CORE_INTERNAL_URL=http://127.0.0.1:7010` in the same protected
 environment file. This is transport-only: token issuer and audience validation
 remain pinned to `https://api.aipowergrid.io`. Using loopback avoids sending
 introspection and long-running inference back out through Cloudflare.
+Core's versioned Nginx site must return an exact external `404` for
+`/v1/oauth/introspect`; only the loopback Uvicorn transport may reach that
+service-key endpoint.
 
 ## Install dark
 
@@ -90,12 +93,17 @@ Enable OAuth only for the isolated canary described in Core's
 `docs/architecture/REMOTE_MCP_AUTH.md`. Prove registration, S256 PKCE consent,
 denial, one-use code redemption, wrong verifier, wrong redirect, expiry,
 revocation, charging, and one bounded MCP tool call before publishing npm
-`0.2.0` or documenting the remote URL as generally available.
+`0.2.0` or documenting the remote URL as generally available. Load evidence
+must include many parallel requests sharing one token and many distinct tokens;
+the former should coalesce or hit the five-second positive cache, while the
+latter must stop at the bounded in-flight introspection ceiling.
 
 ## Rollback
 
 1. Set `GRID_MCP_OAUTH_ENABLED=0` and restart Core. Existing OAuth access tokens
-   then fail introspection without affecting ordinary API keys.
+   then fail introspection without affecting ordinary API keys. The MCP
+   process's bounded positive cache may take at most five seconds to observe
+   the change.
 2. Remove `/etc/nginx/aipg-api.d/mcp.conf` and reload only after `nginx -t`
    passes.
 3. Stop and disable `aipg-mcp.service`.

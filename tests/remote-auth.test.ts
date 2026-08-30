@@ -4,7 +4,7 @@
 import { OAuthErrorCode } from "@modelcontextprotocol/server";
 import { describe, expect, it, vi } from "vitest";
 
-import { GridTokenVerifier } from "../src/remote-auth.js";
+import { GridTokenVerifier, type GridTokenVerifierOptions } from "../src/remote-auth.js";
 
 const NOW_MS = 1_800_000_000_000;
 const NOW_SECONDS = Math.floor(NOW_MS / 1_000);
@@ -28,13 +28,14 @@ function active(overrides: Record<string, unknown> = {}): Record<string, unknown
   };
 }
 
-function verifier(fetchImpl: typeof fetch): GridTokenVerifier {
+function verifier(fetchImpl: typeof fetch, options: Partial<GridTokenVerifierOptions> = {}): GridTokenVerifier {
   return new GridTokenVerifier({
     serviceKey: SERVICE_KEY,
     coreBaseUrl: CORE_ISSUER,
     coreTransportUrl: CORE_TRANSPORT,
     fetch: fetchImpl,
     now: () => NOW_MS,
+    ...options,
   });
 }
 
@@ -97,5 +98,61 @@ describe("Grid OAuth token introspection", () => {
       code: OAuthErrorCode.InvalidToken,
     });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("bounds repeated valid-token introspection with a short positive cache", async () => {
+    let nowMs = NOW_MS;
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(
+      async () => new Response(JSON.stringify(active())),
+    );
+    const tokenVerifier = verifier(fetchMock, {
+      now: () => nowMs,
+      positiveCacheMs: 5_000,
+    });
+
+    await tokenVerifier.verifyAccessToken(USER_TOKEN);
+    await tokenVerifier.verifyAccessToken(USER_TOKEN);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    nowMs += 5_001;
+    await tokenVerifier.verifyAccessToken(USER_TOKEN);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("coalesces concurrent checks for one token into one Core request", async () => {
+    let resolveIntrospection!: (response: Response) => void;
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(
+      async () => new Promise<Response>((resolve) => { resolveIntrospection = resolve; }),
+    );
+    const tokenVerifier = verifier(fetchMock);
+
+    const checks = Array.from(
+      { length: 200 },
+      () => tokenVerifier.verifyAccessToken(USER_TOKEN),
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    resolveIntrospection(new Response(JSON.stringify(active())));
+
+    await expect(Promise.all(checks)).resolves.toHaveLength(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails closed before unbounded distinct introspection work accumulates", async () => {
+    let resolveIntrospection!: (response: Response) => void;
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(
+      async () => new Promise<Response>((resolve) => { resolveIntrospection = resolve; }),
+    );
+    const tokenVerifier = verifier(fetchMock, { maxPendingIntrospections: 1 });
+    const otherToken = `gridu_${"w".repeat(80)}.${"x".repeat(43)}`;
+
+    const first = tokenVerifier.verifyAccessToken(USER_TOKEN);
+    await expect(tokenVerifier.verifyAccessToken(otherToken)).rejects.toMatchObject({
+      code: OAuthErrorCode.ServerError,
+      message: expect.stringContaining("at capacity"),
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    resolveIntrospection(new Response(JSON.stringify(active())));
+    await expect(first).resolves.toMatchObject({ token: USER_TOKEN });
   });
 });
