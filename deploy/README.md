@@ -77,6 +77,10 @@ introspection and long-running inference back out through Cloudflare.
    pointing at the Core protected-resource metadata URL.
 8. Confirm OAuth discovery still returns `404`. Stop if any authorization,
    registration, or token route becomes public before the canary window.
+9. Run `npm run deploy:verify-dark` from the reviewed Grid Skill release. It
+   repeats the machine-checkable dark gates without a credential or generation
+   request and must return `{"status":"ready_dark",...}`. The script does not
+   replace the delayed SSE/keepalive check in step 6.
 
 ## Supervised enablement
 
