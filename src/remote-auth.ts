@@ -7,6 +7,7 @@ import {
   type AuthInfo,
   type OAuthTokenVerifier,
 } from "@modelcontextprotocol/server";
+import { createHash } from "node:crypto";
 
 import { GRID_ORIGIN, normalizeBaseUrl } from "./client.js";
 
@@ -15,6 +16,9 @@ const MAX_TOKEN_LENGTH = 4_200;
 const DEFAULT_TIMEOUT_MS = 10_000;
 const MAX_TOKEN_LIFETIME_SECONDS = 20 * 60;
 const CLOCK_SKEW_SECONDS = 60;
+const DEFAULT_POSITIVE_CACHE_MS = 5_000;
+const DEFAULT_MAX_CACHE_ENTRIES = 1_024;
+const DEFAULT_MAX_PENDING_INTROSPECTIONS = 64;
 const ALLOWED_SCOPES = new Set(["account.read", "inference.submit"]);
 
 const CLIENT_ID_RE = /^grid_oauth_[A-Za-z0-9_-]{20,}$/;
@@ -28,6 +32,14 @@ export interface GridTokenVerifierOptions {
   fetch?: typeof globalThis.fetch;
   timeoutMs?: number;
   now?: () => number;
+  positiveCacheMs?: number;
+  maxCacheEntries?: number;
+  maxPendingIntrospections?: number;
+}
+
+interface CachedAuthInfo {
+  auth: AuthInfo;
+  validUntilMs: number;
 }
 
 function serverError(message: string): OAuthError {
@@ -44,6 +56,17 @@ function serviceKey(value: string | undefined): string {
     throw new Error("AIPG_MCP_SERVICE_KEY must be an introspection-only grid-mcp service key");
   }
   return key;
+}
+
+function boundedInteger(value: number, name: string, minimum: number, maximum: number): number {
+  if (!Number.isInteger(value) || value < minimum || value > maximum) {
+    throw new Error(`${name} must be an integer from ${minimum} through ${maximum}`);
+  }
+  return value;
+}
+
+function tokenCacheKey(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
 }
 
 async function boundedJson(response: Response): Promise<Record<string, unknown>> {
@@ -96,6 +119,11 @@ export class GridTokenVerifier implements OAuthTokenVerifier {
   private readonly fetchImpl: typeof globalThis.fetch;
   private readonly timeoutMs: number;
   private readonly now: () => number;
+  private readonly positiveCacheMs: number;
+  private readonly maxCacheEntries: number;
+  private readonly maxPendingIntrospections: number;
+  private readonly positiveCache = new Map<string, CachedAuthInfo>();
+  private readonly pendingIntrospections = new Map<string, Promise<AuthInfo>>();
 
   constructor(options: GridTokenVerifierOptions = {}) {
     this.key = serviceKey(options.serviceKey);
@@ -107,11 +135,76 @@ export class GridTokenVerifier implements OAuthTokenVerifier {
     this.fetchImpl = options.fetch ?? globalThis.fetch;
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.now = options.now ?? Date.now;
+    this.positiveCacheMs = boundedInteger(
+      options.positiveCacheMs ?? DEFAULT_POSITIVE_CACHE_MS,
+      "positiveCacheMs",
+      0,
+      30_000,
+    );
+    this.maxCacheEntries = boundedInteger(
+      options.maxCacheEntries ?? DEFAULT_MAX_CACHE_ENTRIES,
+      "maxCacheEntries",
+      1,
+      10_000,
+    );
+    this.maxPendingIntrospections = boundedInteger(
+      options.maxPendingIntrospections ?? DEFAULT_MAX_PENDING_INTROSPECTIONS,
+      "maxPendingIntrospections",
+      1,
+      1_000,
+    );
   }
 
   async verifyAccessToken(token: string): Promise<AuthInfo> {
     if (!USER_TOKEN_RE.test(token) || token.length > MAX_TOKEN_LENGTH) throw invalidToken();
 
+    const cacheKey = tokenCacheKey(token);
+    const nowMs = this.now();
+    const cached = this.positiveCache.get(cacheKey);
+    if (cached && cached.validUntilMs > nowMs) {
+      // Touch the entry so insertion order remains a bounded LRU approximation.
+      this.positiveCache.delete(cacheKey);
+      this.positiveCache.set(cacheKey, cached);
+      return cached.auth;
+    }
+    if (cached) this.positiveCache.delete(cacheKey);
+
+    const pending = this.pendingIntrospections.get(cacheKey);
+    if (pending) return pending;
+    if (this.pendingIntrospections.size >= this.maxPendingIntrospections) {
+      throw serverError("Grid token introspection is temporarily at capacity");
+    }
+
+    let verification: Promise<AuthInfo>;
+    verification = this.introspectAccessToken(token)
+      .then((auth) => {
+        const lifetimeMs = typeof auth.expiresAt === "number"
+          ? auth.expiresAt * 1_000 - this.now()
+          : 0;
+        const cacheMs = Math.min(this.positiveCacheMs, lifetimeMs);
+        if (cacheMs > 0) {
+          while (this.positiveCache.size >= this.maxCacheEntries) {
+            const oldest = this.positiveCache.keys().next().value as string | undefined;
+            if (!oldest) break;
+            this.positiveCache.delete(oldest);
+          }
+          this.positiveCache.set(cacheKey, {
+            auth,
+            validUntilMs: this.now() + cacheMs,
+          });
+        }
+        return auth;
+      })
+      .finally(() => {
+        if (this.pendingIntrospections.get(cacheKey) === verification) {
+          this.pendingIntrospections.delete(cacheKey);
+        }
+      });
+    this.pendingIntrospections.set(cacheKey, verification);
+    return verification;
+  }
+
+  private async introspectAccessToken(token: string): Promise<AuthInfo> {
     let response: Response;
     try {
       response = await this.fetchImpl(`${this.coreTransportUrl}/v1/oauth/introspect`, {

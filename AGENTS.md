@@ -56,6 +56,10 @@ text, image, video, audio, model discovery, quotes, and credit inspection.
   only `oauth.introspect`, requires `account.read` plus `inference.submit`, and
   forwards the same user token to Core. Never add durable API-key passthrough,
   service-account inference, identity assertions, or refresh-token storage.
+- Successful introspection may be cached for at most five seconds. Cache keys
+  are token digests, entries and concurrent upstream checks are strictly
+  bounded, identical in-flight checks are coalesced, and failures are never
+  cached. This bounds Core load while keeping rollback propagation short.
 - Keep the public Core origin as the OAuth issuer, audience, resource metadata,
   and MCP resource. Production introspection and inference use the explicit
   loopback transport URL; never substitute that internal URL into token claims.

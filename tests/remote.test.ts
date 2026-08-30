@@ -87,7 +87,7 @@ describe("remote Grid MCP server", () => {
     const result = await client.callTool({ name: "aipg_get_credits", arguments: {} });
     expect(result.structuredContent).toEqual({ total_usd: "1.00" });
 
-    expect(running.introspectFetch).toHaveBeenCalled();
+    expect(running.introspectFetch).toHaveBeenCalledTimes(1);
     for (const [url, init] of running.introspectFetch.mock.calls) {
       expect(String(url)).toBe(`${CORE_TRANSPORT}/v1/oauth/introspect`);
       expect(new Headers(init?.headers).get("authorization")).toBe(`Bearer ${SERVICE_KEY}`);
