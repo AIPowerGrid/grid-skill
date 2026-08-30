@@ -98,6 +98,23 @@ must include many parallel requests sharing one token and many distinct tokens;
 the former should coalesce or hit the five-second positive cache, while the
 latter must stop at the bounded in-flight introspection ceiling.
 
+After obtaining the canary's 15-minute user token, keep it out of arguments and
+shell history. Export it only in the supervised operator shell, run the
+repeatable authenticated gate, then unset it:
+
+```bash
+export AIPG_MCP_ACCESS_TOKEN='<short-lived-gridu-token>'
+AIPG_MCP_CANARY_PAID_TEXT=1 npm run deploy:verify-live
+unset AIPG_MCP_ACCESS_TOKEN
+```
+
+The verifier checks exact OAuth metadata, the complete tool set, authenticated
+credit inspection, a bounded quote, immediate SSE response headers, 20
+same-token requests, and one 16-token text call only when the explicit paid
+flag is set. It never prints the token, account balance, quote amount, prompt
+output, or any service credential. Run denial, replay, expiry, and wrong-PKCE
+protocol cases separately because they require distinct authorization state.
+
 ## Rollback
 
 1. Set `GRID_MCP_OAUTH_ENABLED=0` and restart Core. Existing OAuth access tokens

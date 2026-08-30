@@ -28,6 +28,7 @@
     "test": "vitest run",
     "lint": "tsc --noEmit -p tsconfig.json",
     "deploy:verify-dark": "node deploy/verify-dark.mjs",
+    "deploy:verify-live": "node deploy/verify-live.mjs",
     "check": "npm run typecheck && npm test && npm run build && npm pack --dry-run"
   },
   "keywords": [

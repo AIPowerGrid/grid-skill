@@ -13,6 +13,11 @@ resource. These files are source artifacts, not proof that the service is live.
 - `mcp.env.example` - secret-free shape of the protected runtime environment.
 - `verify-dark.mjs` - read-only, fail-closed verification of private health,
   the public bearer challenge, hidden health, and disabled OAuth routes.
+- `verify-live.mjs` - supervised authenticated production gate for exact OAuth
+  metadata, remote tool discovery, credit and quote reads, SSE response timing,
+  bounded same-token pressure, and an optional capped text call. It reads the
+  short-lived user token only from the environment and never reports economic
+  or credential values.
 - `README.md` - staged rollout, verification, and rollback procedure.
 - `STATUS.md` - non-secret production rollout snapshot and remaining gates.
 
@@ -39,6 +44,9 @@ resource. These files are source artifacts, not proof that the service is live.
 - `npm test` validates the systemd, nginx, secret-file, and runbook contracts.
 - `npm run deploy:verify-dark` checks an installed dark deployment without a
   credential or generation request.
+- `npm run deploy:verify-live` checks an enabled supervised deployment with a
+  short-lived `AIPG_MCP_ACCESS_TOKEN`; generation remains opt-in through the
+  separately bounded `AIPG_MCP_CANARY_PAID_TEXT=1` gate.
 - Keep `STATUS.md` aligned with verified production state; never infer liveness
   from source files alone.
 - `systemd-analyze verify deploy/aipg-mcp.service` on Linux before installation.
