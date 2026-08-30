@@ -44,7 +44,10 @@ export GRID_BASE_URL="https://api.aipowergrid.io"
 ```
 
 The CLI and stdio MCP intentionally do not accept keys on the command line.
-That keeps credentials out of process listings and shell history.
+That keeps credentials out of process listings and shell history. Commands use
+strict flag allowlists: `--api-key`, duplicate flags, misspelled flags, and
+flags belonging to another command are rejected before authentication or any
+network request.
 
 Version `0.2.0` is staged in source with native browser authorization:
 

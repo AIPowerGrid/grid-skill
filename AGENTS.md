@@ -36,6 +36,9 @@ text, image, video, audio, model discovery, quotes, and credit inspection.
   command history. Examples use `GRID_API_KEY` from the environment.
 - Never accept a key as a CLI argument. The local CLI and stdio server read it
   from `GRID_API_KEY` so process listings and shell history do not expose it.
+- Keep a command-specific CLI flag allowlist. Reject unknown commands,
+  duplicate flags, credential-like flags, and flags belonging to another
+  command before resolving credentials or making network requests.
 - Production API traffic is pinned to `https://api.aipowergrid.io`. Alternate
   origins are allowed only on loopback for tests. Reject redirects and return
   URL media output rather than unbounded base64 payloads.
