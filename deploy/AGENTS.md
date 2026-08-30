@@ -10,6 +10,8 @@ resource. These files are source artifacts, not proof that the service is live.
 - `aipg-mcp.service` - systemd process sandbox and loopback runtime contract.
 - `nginx-location.conf` - exact public `/v1/mcp` reverse-proxy location.
 - `mcp.env.example` - secret-free shape of the protected runtime environment.
+- `verify-dark.mjs` - read-only, fail-closed verification of private health,
+  the public bearer challenge, hidden health, and disabled OAuth routes.
 - `README.md` - staged rollout, verification, and rollback procedure.
 
 ## Local Contracts
@@ -30,5 +32,7 @@ resource. These files are source artifacts, not proof that the service is live.
 ## Verification
 
 - `npm test` validates the systemd, nginx, secret-file, and runbook contracts.
+- `npm run deploy:verify-dark` checks an installed dark deployment without a
+  credential or generation request.
 - `systemd-analyze verify deploy/aipg-mcp.service` on Linux before installation.
 - `nginx -t` after placing the location inside the production API server block.

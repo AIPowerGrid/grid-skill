@@ -47,7 +47,10 @@ describe("remote MCP deployment contract", () => {
   });
 
   it("keeps enablement behind migration, dark-route, canary, and rollback gates", async () => {
-    const runbook = await read("deploy/README.md");
+    const [runbook, packageJson] = await Promise.all([
+      read("deploy/README.md"),
+      read("package.json"),
+    ]);
 
     expect(runbook).toContain("GRID_MCP_OAUTH_ENABLED=0");
     expect(runbook).toContain("migration `0031`");
@@ -57,6 +60,10 @@ describe("remote MCP deployment contract", () => {
     expect(runbook).toContain("AIPG_MCP_CORE_INTERNAL_URL=http://127.0.0.1:7010");
     expect(runbook).toContain("text/event-stream");
     expect(runbook).toContain("one-use code redemption");
+    expect(runbook).toContain("npm run deploy:verify-dark");
+    expect(JSON.parse(packageJson).scripts["deploy:verify-dark"]).toBe(
+      "node deploy/verify-dark.mjs",
+    );
     expect(runbook).toContain("Set `GRID_MCP_OAUTH_ENABLED=0`");
     expect(runbook).toContain("Do not delete audit or OAuth tables");
     expect(runbook).not.toMatch(/GRID_MCP_OAUTH_ENABLED=1/);
