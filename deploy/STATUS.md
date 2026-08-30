@@ -32,6 +32,9 @@ machine-checkable live verifier remains the authority for current health.
 - The rollback drill proved that the same previously valid user token receives
   a no-store `401` after the gate is disabled and becomes usable again only
   after a supervised re-enable. Ordinary Grid API keys were unaffected.
+- Natural expiry was checked at `2026-08-30T21:55:55Z`, three seconds after the
+  token's exact 15-minute deadline. The expired token received the same
+  challenged, no-store `401` response.
 
 ## Ongoing obligations
 
