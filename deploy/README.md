@@ -54,6 +54,11 @@ into `/etc/aipg/mcp.env` as `AIPG_MCP_SERVICE_KEY`. Set ownership to
 `root:aipg-mcp`, mode `0640`, then destroy the temporary capture. Never reuse a
 Console, frontend, user, or inference-capable key.
 
+Set `AIPG_MCP_CORE_INTERNAL_URL=http://127.0.0.1:7010` in the same protected
+environment file. This is transport-only: token issuer and audience validation
+remain pinned to `https://api.aipowergrid.io`. Using loopback avoids sending
+introspection and long-running inference back out through Cloudflare.
+
 ## Install dark
 
 1. Install `aipg-mcp.service` as `/etc/systemd/system/aipg-mcp.service`.
@@ -63,10 +68,14 @@ Console, frontend, user, or inference-capable key.
 4. Add `nginx-location.conf` inside the production API TLS server block and run
    `nginx -t` before reload.
 5. Verify `/healthz` is not reachable through the public API origin.
-6. Request `https://api.aipowergrid.io/v1/mcp` without a bearer token. It must
+6. Start a deliberately delayed authenticated MCP call and verify the public
+   response becomes `text/event-stream` within 20 seconds, with a comment
+   keepalive at least every 15 seconds. Stop if the route buffers until the
+   tool finishes.
+7. Request `https://api.aipowergrid.io/v1/mcp` without a bearer token. It must
    return `401`, `Cache-Control: no-store`, and a `WWW-Authenticate` challenge
    pointing at the Core protected-resource metadata URL.
-7. Confirm OAuth discovery still returns `404`. Stop if any authorization,
+8. Confirm OAuth discovery still returns `404`. Stop if any authorization,
    registration, or token route becomes public before the canary window.
 
 ## Supervised enablement

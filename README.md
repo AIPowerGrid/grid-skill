@@ -121,6 +121,7 @@ The process is intentionally loopback-only and belongs behind the trusted
 
 ```bash
 export AIPG_MCP_SERVICE_KEY="grid_..."  # grid-mcp; oauth.introspect only
+export AIPG_MCP_CORE_INTERNAL_URL="http://127.0.0.1:7010"
 export AIPG_MCP_HOST="127.0.0.1"
 export AIPG_MCP_PORT="8788"
 aipg-mcp-http
@@ -130,7 +131,11 @@ The public route will be `https://api.aipowergrid.io/v1/mcp`. The local
 `/healthz` response contains only `{"status":"ok"}`. Host and Origin guards,
 a 256 KiB request limit, bounded introspection responses, exact issuer/audience
 checks, strict scope enforcement, and fail-closed upstream errors are part of
-the server contract.
+the server contract. Remote MCP responses use SSE with 15-second keepalives so
+long video and audio tools remain active through the public edge. The process
+uses the loopback Core URL only as a transport; OAuth issuer, audience,
+protected-resource metadata, and the public MCP resource remain pinned to
+`https://api.aipowergrid.io`.
 
 Do not run this command with an ordinary Grid key. Provision `grid-mcp` with
 only `oauth.introspect`, store it in the server secret store, and keep the
