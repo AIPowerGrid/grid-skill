@@ -2,10 +2,11 @@
 
 Verification date: October 14, 2026 (America/New_York).
 
-This is candidate evidence, not a production deployment or npm publication.
-The remote production MCP still reports seven tools from release 0.2.0.
-Candidate 0.3.0 exposes ten tools. Main/source, release and runtime state must
-be verified separately before directory submissions.
+Release 0.3.0 is published and deployed. PR #19 merged as
+`256433ad710f783d83a83cd27b2b6494a6c1fd6d`; the matching `mcp-v0.3.0` tag
+published through GitHub Actions with npm provenance. Both a fresh registry
+installation and public remote MCP independently report version 0.3.0 and ten
+tools. This does not imply that every modality has an online worker.
 
 ## Candidate Checks
 
@@ -48,8 +49,35 @@ be verified separately before directory submissions.
   must bind the same worker key/name to the current payout wallet and be signed
   by that wallet before it is installed. Do not extend or bypass an expired
   certificate or silently change account ownership/payout settings.
-- After owner review and green hosted CI, publish the candidate through the
-  matching provenance workflow and deploy the exact main commit plus matching
-  nginx overlay. Repeat authenticated remote discovery and media checks.
-- Verify the fresh npm tarball before listing the updated service. Runtime
-  tools alone do not prove worker availability.
+- Real timed-keyframe and reference-audio/video generations were not run in
+  this bounded canary. Contract tests cover forwarding; model discovery remains
+  authoritative for recipe-specific support. Do not claim these combinations
+  have all been production-qualified.
+
+## Released Runtime Checks
+
+- [Publication workflow](https://github.com/AIPowerGrid/grid-skill/actions/runs/38664695328)
+  passed version/main ancestry checks, all 66 tests, build, audit and OIDC
+  provenance publication. Registry metadata identifies the same package digest
+  as the production build: SHA-1 `3389606d80663224ed005b89b2eec7c0bbdc68e2`.
+- A fresh isolated registry installation initialized a real stdio MCP process,
+  listed ten tools, discovered live LTX parameters, and recovered the completed
+  canary video with its media resource link. `npm audit signatures` verified
+  16 registry signatures and nine provenance attestations in the smoke install.
+- Production independently passed those same read-only protocol checks.
+- A second Google-backed authorization renewed the same two scopes for fifteen
+  minutes. The deployed live verifier passed metadata, ten-tool discovery,
+  credit inspection, quote, 20 concurrent same-token reads, immediate SSE
+  headers (125 ms), and one tiny paid text call within the original aggregate
+  $0.03 budget. No additional full canary budget was assumed.
+- A 307,288-byte authenticated public tools/list request returned 200 with the
+  new tool set, proving that the old proxy's 256 KiB rejection is gone without
+  paying for another generation. The exact 67,174,400-byte ceiling and large
+  request concurrency rejection are contract-tested, not production load-tested.
+- The immutable production release passed all 66 tests and a zero-advisory
+  audit on Node 22.22.0 before activation. The proxy configuration passed
+  nginx validation; loopback health and the service are healthy after restart.
+- Core, account settings, OAuth scopes, service credentials and the global
+  charging gate were not changed in this release. The prior Core OAuth off/on
+  drill was not repeated against unrelated live consumers; deployment retained
+  the previous immutable MCP release and proxy backup for scoped rollback.

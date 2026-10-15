@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.0 - Unreleased
+## 0.3.0 - 2026-10-14
 
 - Add image editing, model-gated image controls, and bounded CLI media files.
 - Add live model-parameter discovery for recipe-specific media constraints.
@@ -12,4 +12,4 @@
 - Share request validation across MCP and CLI, including safe seeds and audio
   control formats; keep browser login guidance aligned with the live release.
 - Update MCP server/client to 2.3.1, Node adapter to 2.1.1 and vulnerable
-  compatible transitive dependencies. The candidate dependency audit is clean.
+  compatible transitive dependencies. The release dependency audit is clean.
