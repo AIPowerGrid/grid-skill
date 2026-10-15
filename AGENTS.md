@@ -11,6 +11,10 @@ text, image, video, audio, model discovery, quotes, and credit inspection.
 - `SKILL.md` - the agent-facing contract. Its YAML description controls when an
   agent should load it; the body contains operational API guidance.
 - `src/client.ts` - fixed-origin Grid HTTP client and request contracts.
+- `src/requests.ts` - shared MCP/CLI/client schemas, safe numeric bounds and
+  the Core-aligned request size limit. New public fields must be represented here.
+- `src/cli-media.ts` - bounded file-to-inline-media inputs and keyframe JSON
+  resolution relative to the user's file.
 - `src/mcp.ts` - MCP tool definitions. Keep tools thin; API behavior belongs to
   Core, not this adapter.
 - `src/stdio.ts` - local MCP stdio entry point.
@@ -65,9 +69,19 @@ text, image, video, audio, model discovery, quotes, and credit inspection.
 - Remote HTTP tool calls always start an SSE response with 15-second keepalives
   so long media generations remain active through the public edge. Keep nginx
   buffering disabled and test that headers arrive before the tool completes.
-- Mark generation tools as paid, non-idempotent, and economically destructive
+- Native media inputs share Core's 64 MiB encoded budget plus a 64 KiB JSON
+  envelope. The client, remote request reader and nginx overlay must agree;
+  individual source/schema limits still apply.
+  At most two requests above 256 KiB remain in flight through response close;
+  return 429 for excess large requests while permitting small status reads.
+- Current LTX video uses `aipg_submit_video_job` with an explicit micro-USD
+  ceiling and idempotency key. Status/recovery is read-only and may select one
+  UUID or one request key; never automatically retry with a new key. The older
+  synchronous video tool remains subject to Core's admission policy.
+- Mark generation tools as paid and economically destructive
   in MCP annotations; model discovery, credit inspection, and quotes remain
-  read-only. Bound every upstream response before buffering it into an agent
+  read-only. Only key-bound asynchronous submission is idempotent; ordinary
+  generation is not. Bound every upstream response before buffering it into an agent
   process, including unsuccessful responses whose displayed detail is smaller.
 - Keep the remote process bound to loopback and expose only `/v1/mcp` through
   the trusted API reverse proxy. Preserve exact issuer/audience checks, Host and

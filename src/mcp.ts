@@ -5,8 +5,12 @@ import { McpServer, type CallToolResult, type ResourceLink } from "@modelcontext
 import { z } from "zod";
 
 import { GridClient, extractMediaUrls, type JsonObject } from "./client.js";
+import {
+  audioRequestSchema, imageRequestSchema, quoteRequestSchema, textRequestSchema, videoRequestSchema,
+  submitVideoRequestSchema, videoJobLookupSchema,
+} from "./requests.js";
 
-const VERSION = "0.2.0";
+const VERSION = "0.3.0";
 
 function result(value: JsonObject, includeUrls = false): CallToolResult {
   const content: CallToolResult["content"] = [
@@ -66,6 +70,19 @@ export function createGridMcpServer(client = new GridClient()): McpServer {
   );
 
   server.registerTool(
+    "aipg_get_model_parameters",
+    {
+      title: "Get model parameters",
+      description: "Read the live model-specific media contract: supported source modes, frame alignment, dimensions, sampler, steps, audio setting and other limits. Check this before using advanced image or video controls; availability alone does not prove parameter support.",
+      inputSchema: z.object({ model: z.string().min(1).max(256) }).strict(),
+      annotations: readOnlyAnnotations,
+    },
+    async ({ model }) => {
+      try { return result(await client.getModelParameters(model)); } catch (error) { return toolError(error); }
+    },
+  );
+
+  server.registerTool(
     "aipg_get_credits",
     {
       title: "Get Grid credits",
@@ -83,14 +100,7 @@ export function createGridMcpServer(client = new GridClient()): McpServer {
     {
       title: "Quote a Grid request",
       description: "Quote a text, image, video, audio, or 3D request without moving credits.",
-      inputSchema: z.object({
-        model: z.string().min(1).max(256),
-        modality: z.enum(["text", "image", "video", "audio", "3d"]),
-        prompt_tokens: z.number().int().min(0).max(2_000_000).optional(),
-        max_tokens: z.number().int().min(0).max(1_000_000).optional(),
-        n: z.number().int().min(1).max(16).optional(),
-        seconds: z.number().positive().max(3_600).optional(),
-      }),
+      inputSchema: quoteRequestSchema,
       annotations: readOnlyAnnotations,
     },
     async (input) => {
@@ -103,13 +113,7 @@ export function createGridMcpServer(client = new GridClient()): McpServer {
     {
       title: "Generate text",
       description: "Run a paid non-streaming chat completion on AI Power Grid. This consumes Grid credits; quote first when a budget or confirmation is required.",
-      inputSchema: z.object({
-        prompt: z.string().min(1).max(200_000),
-        model: z.string().min(1).max(256).optional(),
-        system: z.string().max(100_000).optional(),
-        max_tokens: z.number().int().min(1).max(1_000_000).optional(),
-        temperature: z.number().min(0).max(2).optional(),
-      }),
+      inputSchema: textRequestSchema,
       annotations: paidGenerationAnnotations,
     },
     async (input) => {
@@ -121,16 +125,8 @@ export function createGridMcpServer(client = new GridClient()): McpServer {
     "aipg_generate_image",
     {
       title: "Generate an image",
-      description: "Generate one or more paid images and return shareable HTTPS media URLs. This consumes Grid credits; quote first when a budget or confirmation is required.",
-      inputSchema: z.object({
-        prompt: z.string().min(1).max(100_000),
-        model: z.string().min(1).max(256).optional(),
-        n: z.number().int().min(1).max(4).optional(),
-        size: z.string().regex(/^\d+x\d+$/).optional(),
-        seed: z.number().int().nonnegative().optional(),
-        negative_prompt: z.string().max(100_000).optional(),
-        style: z.string().max(128).optional(),
-      }),
+      description: "Generate or edit paid images and return shareable HTTPS media URLs. Supply an inline image only for a model advertising img2img. Model-specific steps, cfg_scale and sampler are validated by Core. This consumes Grid credits; quote first when a budget or confirmation is required.",
+      inputSchema: imageRequestSchema,
       annotations: paidGenerationAnnotations,
     },
     async (input) => {
@@ -142,17 +138,8 @@ export function createGridMcpServer(client = new GridClient()): McpServer {
     "aipg_generate_video",
     {
       title: "Generate a video",
-      description: "Generate a paid video from text, optionally with a start image, and return shareable HTTPS URLs. This consumes Grid credits; quote first when a budget or confirmation is required.",
-      inputSchema: z.object({
-        prompt: z.string().min(1).max(100_000),
-        model: z.string().min(1).max(256).optional(),
-        seconds: z.number().min(1).max(10).optional(),
-        fps: z.number().int().min(8).max(30).optional(),
-        size: z.string().regex(/^\d+x\d+$/).optional(),
-        seed: z.number().int().nonnegative().optional(),
-        image: z.string().max(20_000_000).optional(),
-        style: z.string().max(128).optional(),
-      }),
+      description: "Generate paid video with a start image, timed keyframes, or supported reference audio/video/image inputs. Discover a model's source modes first; Core validates recipe-specific frame counts, source formats and combinations. Inline sources share a 64 MiB encoded-media budget. This consumes Grid credits; quote first when a budget or confirmation is required.",
+      inputSchema: videoRequestSchema,
       annotations: paidGenerationAnnotations,
     },
     async (input) => {
@@ -161,22 +148,37 @@ export function createGridMcpServer(client = new GridClient()): McpServer {
   );
 
   server.registerTool(
+    "aipg_submit_video_job",
+    {
+      title: "Submit a video job",
+      description: "Submit paid LTX video generation with a required server-enforced spend ceiling and unique idempotency key. Use this for current LTX models, keyframes and reference media. Returns a job to poll with aipg_get_video_job. After a timeout, look up the same key before retrying; never submit a new key automatically. This consumes Grid credits; quote first when a budget or confirmation is required.",
+      inputSchema: submitVideoRequestSchema,
+      annotations: { ...paidGenerationAnnotations, idempotentHint: true },
+    },
+    async (input) => {
+      try { return result(await client.submitVideo(input), true); } catch (error) { return toolError(error); }
+    },
+  );
+
+  server.registerTool(
+    "aipg_get_video_job",
+    {
+      title: "Get a video job",
+      description: "Read status and output URLs for your video job, or recover a lost submission reply by its idempotency key. Does not submit another job or spend credits. Poll with a delay rather than a tight loop.",
+      inputSchema: videoJobLookupSchema,
+      annotations: readOnlyAnnotations,
+    },
+    async (input) => {
+      try { return result(await client.getVideoJob(input), true); } catch (error) { return toolError(error); }
+    },
+  );
+
+  server.registerTool(
     "aipg_generate_audio",
     {
       title: "Generate music or audio",
       description: "Generate paid audio with ACE-Step controls and return shareable HTTPS URLs. This consumes Grid credits; quote first when a budget or confirmation is required.",
-      inputSchema: z.object({
-        prompt: z.string().min(1).max(2_000),
-        lyrics: z.string().max(20_000).optional(),
-        model: z.string().min(1).max(128).optional(),
-        seconds: z.number().min(10).max(300).optional(),
-        inference_steps: z.number().int().min(1).max(20).optional(),
-        bpm: z.number().int().min(30).max(300).optional(),
-        key_scale: z.string().min(7).max(12).optional(),
-        time_signature: z.enum(["2/4", "3/4", "4/4", "6/8"]).optional(),
-        vocal_language: z.string().regex(/^[a-zA-Z]{2}$/).optional(),
-        seed: z.number().int().nonnegative().optional(),
-      }),
+      inputSchema: audioRequestSchema,
       annotations: paidGenerationAnnotations,
     },
     async (input) => {

@@ -37,7 +37,7 @@ describe("remote MCP deployment contract", () => {
     const nginx = await read("deploy/nginx-location.conf");
 
     expect(nginx).toMatch(/^location = \/v1\/mcp \{$/m);
-    expect(nginx).toMatch(/^\s+client_max_body_size 256k;$/m);
+    expect(nginx).toMatch(/^\s+client_max_body_size 67174400;$/m);
     expect(nginx).toMatch(/^\s+proxy_pass http:\/\/127\.0\.0\.1:8788;$/m);
     expect(nginx).toMatch(/^\s+proxy_buffering off;$/m);
     expect(nginx).toMatch(/^\s+proxy_read_timeout 60s;$/m);

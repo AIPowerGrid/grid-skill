@@ -1,6 +1,6 @@
 {
   "name": "@aipowergrid/mcp",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "AI Power Grid CLI and MCP server for text, image, video, and audio generation",
   "type": "module",
   "main": "./dist/index.js",
@@ -58,12 +58,12 @@
     "access": "public"
   },
   "dependencies": {
-    "@modelcontextprotocol/node": "2.0.0",
-    "@modelcontextprotocol/server": "2.0.0",
+    "@modelcontextprotocol/node": "2.1.1",
+    "@modelcontextprotocol/server": "2.3.1",
     "zod": "4.5.4"
   },
   "devDependencies": {
-    "@modelcontextprotocol/client": "2.0.0",
+    "@modelcontextprotocol/client": "2.3.1",
     "@types/node": "24.10.1",
     "typescript": "5.9.3",
     "vitest": "4.1.11"

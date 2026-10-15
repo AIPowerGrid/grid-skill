@@ -6,14 +6,17 @@ export type CliFlags = Record<string, string | boolean>;
 const COMMAND_FLAGS: Record<string, ReadonlySet<string>> = {
   help: new Set(),
   models: new Set(),
+  params: new Set(["model"]),
   login: new Set(["no_open"]),
   logout: new Set(),
   "auth-status": new Set(),
   credits: new Set(),
-  quote: new Set(["model", "modality", "prompt_tokens", "max_tokens", "n", "seconds"]),
+  quote: new Set(["model", "modality", "prompt_tokens", "max_tokens", "n", "seconds", "frames"]),
   text: new Set(["prompt", "model", "system", "max_tokens", "temperature"]),
-  image: new Set(["prompt", "model", "n", "size", "seed", "negative_prompt", "style"]),
-  video: new Set(["prompt", "model", "seconds", "fps", "size", "seed", "image", "style"]),
+  image: new Set(["prompt", "model", "n", "size", "seed", "negative_prompt", "style", "image", "image_file", "denoise", "strength", "steps", "cfg_scale", "sampler", "output_format", "max_cost_micro_usd"]),
+  video: new Set(["prompt", "model", "n", "seconds", "frames", "fps", "size", "seed", "image", "image_file", "style", "reference_audio_file", "reference_video_file", "reference_image_file", "keyframes_file"]),
+  "video-submit": new Set(["prompt", "model", "seconds", "frames", "fps", "size", "seed", "image_file", "style", "reference_audio_file", "reference_video_file", "reference_image_file", "keyframes_file", "negative_prompt", "steps", "cfg_scale", "sampler", "audio", "guide_strength", "reference_strength", "reference_attention_strength", "motion_attention_strength", "max_cost_micro_usd", "idempotency_key"]),
+  "video-status": new Set(["job_id", "idempotency_key"]),
   audio: new Set([
     "prompt",
     "lyrics",
@@ -75,6 +78,9 @@ export function validateCliInvocation(command: string | undefined, flags: CliFla
     }
     if (BOOLEAN_FLAGS.has(name) && flags[name] !== true) {
       throw new Error(`${displayFlag(name)} does not accept a value`);
+    }
+    if (!BOOLEAN_FLAGS.has(name) && typeof flags[name] !== "string") {
+      throw new Error(`${displayFlag(name)} requires a value`);
     }
   }
 }

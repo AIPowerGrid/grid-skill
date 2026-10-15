@@ -38,15 +38,18 @@ describe("Grid MCP server", () => {
       "aipg_generate_text",
       "aipg_generate_video",
       "aipg_get_credits",
+      "aipg_get_model_parameters",
+      "aipg_get_video_job",
       "aipg_list_models",
       "aipg_quote",
+      "aipg_submit_video_job",
     ]);
     for (const tool of tools) {
-      const paid = tool.name.startsWith("aipg_generate_");
+      const paid = tool.name.startsWith("aipg_generate_") || tool.name === "aipg_submit_video_job";
       expect(tool.annotations).toMatchObject({
         readOnlyHint: !paid,
         destructiveHint: paid,
-        idempotentHint: !paid,
+        idempotentHint: !paid || tool.name === "aipg_submit_video_job",
         openWorldHint: true,
       });
       if (paid) {
@@ -78,6 +81,18 @@ describe("Grid MCP server", () => {
       type: "resource_link",
       uri: "https://media.aipg.art/audio/demo.wav",
     }));
+  });
+
+  it("forwards image editing and recovers async video outputs through the protocol", async () => {
+    const output = { schema: "aipg.video-job.v1", state: "completed", result: { media: [{ url: "https://media.aipg.art/video/check.mp4" }] } };
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async () => new Response(JSON.stringify(output)));
+    const client = await connectedClient(new GridClient({ apiKey: "grid_test_key", baseUrl: "http://127.0.0.1:9999", fetch: fetchMock }));
+    const edited = await client.callTool({ name: "aipg_generate_image", arguments: { prompt: "make it snowy", image: "data:image/png;base64,aGVsbG8=", n: 2 } });
+    expect(edited.isError).not.toBe(true);
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({ image: "data:image/png;base64,aGVsbG8=", n: 2 });
+    const recovered = await client.callTool({ name: "aipg_get_video_job", arguments: { idempotency_key: "00000000-0000-4000-8000-000000000001" } });
+    expect(recovered.content).toContainEqual(expect.objectContaining({ type: "resource_link", uri: "https://media.aipg.art/video/check.mp4" }));
+    expect(fetchMock.mock.calls[1]?.[1]?.method).toBe("GET");
   });
 
   it("returns bounded tool errors instead of throwing across the protocol", async () => {
