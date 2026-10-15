@@ -196,4 +196,41 @@ describe("GridClient", () => {
     expect(() => new GridClient({ baseUrl: "https://attacker.example" })).toThrow("must be");
     expect(() => new GridClient({ baseUrl: "ftp://localhost/core" })).toThrow("HTTP or HTTPS");
   });
+
+  it("submits bounded video intent once and recovers by key without a second POST", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async () => jsonResponse({ state: "queued" }));
+    const client = new GridClient({ apiKey: "grid_test_key", baseUrl: "http://127.0.0.1:9999", fetch: fetchMock });
+    const key = "00000000-0000-4000-8000-000000000001";
+    await client.submitVideo({
+      prompt: "moving geometric shapes", frames: 337, max_cost_micro_usd: 20_000, idempotency_key: key,
+      keyframes: [{ image: "data:image/png;base64,YQ==", frame: 0, strength: 0.8 }],
+      reference_audio: "data:audio/wav;base64,YQ==", audio: true,
+    });
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("http://127.0.0.1:9999/v1/videos/jobs");
+    const sent = fetchMock.mock.calls[0]?.[1];
+    expect(sent?.headers).toMatchObject({ "Idempotency-Key": key });
+    const body = JSON.parse(String(sent?.body));
+    expect(body).toMatchObject({ frames: 337, max_cost_micro_usd: 20_000, response_format: "url", reference_audio: "data:audio/wav;base64,YQ==" });
+    expect(body).not.toHaveProperty("idempotency_key");
+    await client.getVideoJob({ idempotency_key: key });
+    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({ method: "GET", headers: { "Idempotency-Key": key } });
+    await expect(client.submitVideo({ prompt: "private", max_cost_micro_usd: 0, idempotency_key: key })).rejects.toThrow("Invalid Grid request");
+    await expect(client.getVideoJob({ job_id: "../../credits" })).rejects.toThrow("Invalid Grid request");
+    await expect(client.getVideoJob({})).rejects.toThrow("Invalid Grid request");
+    await expect(client.getVideoJob({ idempotency_key: "review-video-1" })).rejects.toThrow("Invalid Grid request");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("preserves editing and frame quotes and rejects malformed audio controls locally", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async () => jsonResponse({ data: [] }));
+    const client = new GridClient({ apiKey: "grid_test_key", baseUrl: "http://127.0.0.1:9999", fetch: fetchMock });
+    await client.generateImage({ prompt: "edit", image: "data:image/png;base64,YQ==", n: 4, max_cost_micro_usd: 12_000 });
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({ image: "data:image/png;base64,YQ==", n: 4, max_cost_micro_usd: 12_000 });
+    await client.quote({ model: "LTX-2.5 Distilled BF16", modality: "video", frames: 97 });
+    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toMatchObject({ frames: 97 });
+    await expect(client.generateAudio({ prompt: "private", vocal_language: "EN" })).rejects.toThrow("vocal_language");
+    await expect(client.generateAudio({ prompt: "private", key_scale: "garbage" })).rejects.toThrow("key_scale");
+    await expect(client.generateAudio({ prompt: "private", seed: Number.MAX_SAFE_INTEGER + 1 })).rejects.toThrow("seed");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
 });

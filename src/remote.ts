@@ -14,9 +14,12 @@ import { createMcpHandler, requireBearerAuth, type AuthInfo } from "@modelcontex
 import { GRID_ORIGIN, GridClient, normalizeBaseUrl } from "./client.js";
 import { createGridMcpServer } from "./mcp.js";
 import { GridTokenVerifier } from "./remote-auth.js";
+import { GRID_MAX_REQUEST_BYTES } from "./requests.js";
 
 export const MCP_PATH = "/v1/mcp";
-export const MCP_MAX_REQUEST_BYTES = 256 * 1024;
+export const MCP_MAX_REQUEST_BYTES = GRID_MAX_REQUEST_BYTES;
+export const MCP_LARGE_REQUEST_BYTES = 256 * 1024;
+export const MCP_MAX_LARGE_REQUESTS = 2;
 export const MCP_SSE_KEEPALIVE_MS = 15_000;
 export const MCP_REQUIRED_SCOPES = ["account.read", "inference.submit"] as const;
 
@@ -82,13 +85,14 @@ function contentLength(req: IncomingMessage): number | undefined {
   return value;
 }
 
-async function readBoundedJson(req: IncomingMessage): Promise<unknown> {
+async function readBoundedJson(req: IncomingMessage, claimLargeRequest: () => void): Promise<unknown> {
   const mediaType = (req.headers["content-type"] ?? "").split(";", 1)[0]?.trim().toLowerCase();
   if (mediaType !== "application/json") throw new HttpInputError(415, "Content-Type must be application/json");
   const declared = contentLength(req);
   if (declared !== undefined && declared > MCP_MAX_REQUEST_BYTES) {
     throw new HttpInputError(413, "MCP request body is too large");
   }
+  if (declared !== undefined && declared > MCP_LARGE_REQUEST_BYTES) claimLargeRequest();
 
   const chunks: Buffer[] = [];
   let received = 0;
@@ -96,6 +100,7 @@ async function readBoundedJson(req: IncomingMessage): Promise<unknown> {
     const value = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array);
     received += value.byteLength;
     if (received > MCP_MAX_REQUEST_BYTES) throw new HttpInputError(413, "MCP request body is too large");
+    if (received > MCP_LARGE_REQUEST_BYTES) claimLargeRequest();
     chunks.push(value);
   }
   if (received === 0) throw new HttpInputError(400, "MCP request body is required");
@@ -162,8 +167,26 @@ export function createRemoteMcpHttpServer(options: RemoteMcpServerOptions = {}):
   const nodeHandler = toNodeHandler(mcp, { onerror: report });
   const validateHost = hostHeaderValidation(options.allowedHostnames ?? DEFAULT_ALLOWED_HOSTNAMES);
   const validateOrigin = originValidation(options.allowedOriginHostnames ?? DEFAULT_ALLOWED_ORIGINS);
+  let largeRequests = 0;
 
   const server = createServer(async (req, res) => {
+    let largeRequestClaimed = false;
+    const releaseLargeRequest = () => {
+      if (largeRequestClaimed) {
+        largeRequestClaimed = false;
+        largeRequests -= 1;
+      }
+    };
+    // Keep a large request's slot until its SSE response ends, including the
+    // upstream generation. Small discovery and status requests remain usable.
+    res.once("close", releaseLargeRequest);
+    res.once("finish", releaseLargeRequest);
+    const claimLargeRequest = () => {
+      if (largeRequestClaimed) return;
+      if (largeRequests >= MCP_MAX_LARGE_REQUESTS) throw new HttpInputError(429, "Large MCP request capacity is busy; retry later");
+      largeRequestClaimed = true;
+      largeRequests += 1;
+    };
     try {
       if (!validateHost(req, res) || !validateOrigin(req, res)) return;
       const path = requestPath(req);
@@ -187,7 +210,7 @@ export function createRemoteMcpHttpServer(options: RemoteMcpServerOptions = {}):
         return;
       }
       (req as IncomingMessage & { auth?: AuthInfo }).auth = auth;
-      const parsedBody = req.method === "POST" ? await readBoundedJson(req) : undefined;
+      const parsedBody = req.method === "POST" ? await readBoundedJson(req, claimLargeRequest) : undefined;
       await nodeHandler(req as unknown as NodeIncomingMessageLike, res, parsedBody);
     } catch (error) {
       if (res.headersSent) {

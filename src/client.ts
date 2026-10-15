@@ -1,6 +1,18 @@
 // SPDX-FileCopyrightText: 2026 AI Power Grid
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { type ZodType } from "zod";
+import {
+  GRID_MAX_REQUEST_BYTES,
+  audioRequestSchema, imageRequestSchema, quoteRequestSchema, textRequestSchema, videoRequestSchema,
+  submitVideoRequestSchema, videoJobLookupSchema,
+  type AudioRequest, type ImageRequest, type QuoteRequest, type TextRequest, type VideoRequest,
+  type SubmitVideoRequest, type VideoJobLookup,
+} from "./requests.js";
+
+export type { AudioRequest, ImageRequest, QuoteRequest, TextRequest, VideoRequest } from "./requests.js";
+export type { SubmitVideoRequest, VideoJobLookup } from "./requests.js";
+
 export const GRID_ORIGIN = "https://api.aipowergrid.io";
 
 const MAX_ERROR_BODY = 2_000;
@@ -25,57 +37,6 @@ export interface GridClientOptions {
   timeoutMs?: number;
 }
 
-export interface QuoteRequest {
-  model: string;
-  modality: Modality;
-  prompt_tokens?: number | undefined;
-  max_tokens?: number | undefined;
-  n?: number | undefined;
-  seconds?: number | undefined;
-}
-
-export interface TextRequest {
-  prompt: string;
-  model?: string | undefined;
-  max_tokens?: number | undefined;
-  temperature?: number | undefined;
-  system?: string | undefined;
-}
-
-export interface ImageRequest {
-  prompt: string;
-  model?: string | undefined;
-  n?: number | undefined;
-  size?: string | undefined;
-  seed?: number | undefined;
-  negative_prompt?: string | undefined;
-  style?: string | undefined;
-}
-
-export interface VideoRequest {
-  prompt: string;
-  model?: string | undefined;
-  seconds?: number | undefined;
-  fps?: number | undefined;
-  size?: string | undefined;
-  seed?: number | undefined;
-  image?: string | undefined;
-  style?: string | undefined;
-}
-
-export interface AudioRequest {
-  prompt: string;
-  lyrics?: string | undefined;
-  model?: string | undefined;
-  seconds?: number | undefined;
-  inference_steps?: number | undefined;
-  bpm?: number | undefined;
-  key_scale?: string | undefined;
-  time_signature?: "2/4" | "3/4" | "4/4" | "6/8" | undefined;
-  vocal_language?: string | undefined;
-  seed?: number | undefined;
-}
-
 export function normalizeBaseUrl(value: string | undefined, variableName = "GRID_BASE_URL"): string {
   const candidate = (value || GRID_ORIGIN).replace(/\/+$/, "");
   const parsed = new URL(candidate);
@@ -98,6 +59,15 @@ function scrub(value: string, secret: string | undefined): string {
 
 function omitUndefined<T extends object>(value: T): JsonObject {
   return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined));
+}
+
+function validate<T>(schema: ZodType<T>, input: T): T {
+  const parsed = schema.safeParse(input);
+  if (!parsed.success) {
+    // Validation errors must not reflect private inline media or prompt text.
+    throw new GridApiError(`Invalid Grid request fields: ${parsed.error.issues.map((issue) => issue.path.join(".")).join(", ")}`);
+  }
+  return parsed.data;
 }
 
 async function readBoundedText(response: Response, limit: number, label: string): Promise<string> {
@@ -164,11 +134,17 @@ export class GridClient {
     return this.request("GET", "/v1/account/credits");
   }
 
+  async getModelParameters(model: string): Promise<JsonObject> {
+    if (!model || model.length > 256) throw new GridApiError("Invalid model name");
+    return this.request("GET", `/v1/models/${encodeURIComponent(model)}/params`, undefined, false);
+  }
+
   async quote(input: QuoteRequest): Promise<JsonObject> {
-    return this.request("POST", "/v1/account/credits/quote", omitUndefined(input));
+    return this.request("POST", "/v1/account/credits/quote", omitUndefined(validate(quoteRequestSchema, input)));
   }
 
   async generateText(input: TextRequest): Promise<JsonObject> {
+    input = validate(textRequestSchema, input);
     const messages: JsonObject[] = [];
     if (input.system) messages.push({ role: "system", content: input.system });
     messages.push({ role: "user", content: input.prompt });
@@ -183,20 +159,33 @@ export class GridClient {
 
   async generateImage(input: ImageRequest): Promise<JsonObject> {
     return this.request("POST", "/v1/images/generations", omitUndefined({
-      ...input,
+      ...validate(imageRequestSchema, input),
       response_format: "url",
     }), true, GRID_REQUEST_TIMEOUTS_MS.image);
   }
 
   async generateVideo(input: VideoRequest): Promise<JsonObject> {
     return this.request("POST", "/v1/videos/generations", omitUndefined({
-      ...input,
+      ...validate(videoRequestSchema, input),
       response_format: "url",
     }), true, GRID_REQUEST_TIMEOUTS_MS.video);
   }
 
   async generateAudio(input: AudioRequest): Promise<JsonObject> {
-    return this.request("POST", "/v1/audio/generations", omitUndefined(input), true, GRID_REQUEST_TIMEOUTS_MS.audio);
+    return this.request("POST", "/v1/audio/generations", omitUndefined(validate(audioRequestSchema, input)), true, GRID_REQUEST_TIMEOUTS_MS.audio);
+  }
+
+  async submitVideo(input: SubmitVideoRequest): Promise<JsonObject> {
+    const { idempotency_key, ...body } = validate(submitVideoRequestSchema, input);
+    return this.request("POST", "/v1/videos/jobs", { ...omitUndefined(body), response_format: "url" },
+      true, GRID_REQUEST_TIMEOUTS_MS.video, { "Idempotency-Key": idempotency_key });
+  }
+
+  async getVideoJob(input: VideoJobLookup): Promise<JsonObject> {
+    const lookup = validate(videoJobLookupSchema, input);
+    return this.request("GET", lookup.job_id ? `/v1/videos/jobs/${lookup.job_id}` : "/v1/videos/jobs",
+      undefined, true, GRID_REQUEST_TIMEOUTS_MS.default,
+      lookup.idempotency_key ? { "Idempotency-Key": lookup.idempotency_key } : {});
   }
 
   private async request<T extends JsonObject>(
@@ -205,6 +194,7 @@ export class GridClient {
     body?: JsonObject,
     authenticated = true,
     timeoutMs: number = GRID_REQUEST_TIMEOUTS_MS.default,
+    extraHeaders: Record<string, string> = {},
   ): Promise<T> {
     if (authenticated && !this.credential) {
       throw new GridApiError(
@@ -212,7 +202,7 @@ export class GridClient {
       );
     }
 
-    const headers: Record<string, string> = { Accept: "application/json" };
+    const headers: Record<string, string> = { Accept: "application/json", ...extraHeaders };
     if (body) headers["Content-Type"] = "application/json";
     if (authenticated && this.credential) headers.Authorization = `Bearer ${this.credential}`;
 
@@ -223,7 +213,12 @@ export class GridClient {
         redirect: "error",
         signal: AbortSignal.timeout(this.timeoutMs ?? timeoutMs),
       };
-      if (body) init.body = JSON.stringify(body);
+      if (body) {
+        init.body = JSON.stringify(body);
+        if (Buffer.byteLength(init.body) > GRID_MAX_REQUEST_BYTES) {
+          throw new GridApiError(`Grid request exceeded the ${GRID_MAX_REQUEST_BYTES}-byte body limit`);
+        }
+      }
       const response = await this.fetchImpl(`${this.baseUrl}${path}`, init);
       if (!response.ok) {
         const detail = scrub(await readBoundedText(response, MAX_ERROR_BODY, "Grid API error body"), this.credential);
@@ -245,7 +240,9 @@ export class GridClient {
 }
 
 export function extractMediaUrls(value: JsonObject): string[] {
-  const data = value.data;
+  const nested = value.schema === "aipg.video-job.v1" && value.result && typeof value.result === "object"
+    ? value.result as JsonObject : value;
+  const data = value.schema === "aipg.video-job.v1" ? nested.media : nested.data;
   if (!Array.isArray(data)) return [];
   return data.flatMap((item) => {
     if (!item || typeof item !== "object") return [];

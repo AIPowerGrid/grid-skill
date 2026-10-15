@@ -13,11 +13,14 @@ const SAME_TOKEN_CONCURRENCY = 20;
 const REQUIRED_TOOLS = new Set([
   "aipg_list_models",
   "aipg_get_credits",
+  "aipg_get_model_parameters",
   "aipg_quote",
   "aipg_generate_text",
   "aipg_generate_image",
   "aipg_generate_video",
   "aipg_generate_audio",
+  "aipg_submit_video_job",
+  "aipg_get_video_job",
 ]);
 const USER_TOKEN_RE = /^gridu_[A-Za-z0-9_-]{20,4000}\.[A-Za-z0-9_-]{20,100}$/;
 

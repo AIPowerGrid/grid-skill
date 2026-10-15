@@ -39,11 +39,13 @@ duplicating balances or promotional grants. If no key is configured:
 3. Ask them to store the key in their local secret store or `GRID_API_KEY`
    environment variable. Do not ask them to paste it into chat.
 
-Do not invent, scrape, or request an anonymous key. Native browser authorization
-is staged for the next `aipg` CLI release, but Core keeps it disabled until the
-supervised OAuth rollout passes. Until that release is explicitly announced,
-console key creation is the supported handoff; do not claim `aipg login` or a
-device flow is live.
+Do not invent, scrape, or request an anonymous key. The published CLI supports
+`aipg login`: it opens browser consent using PKCE and stores a 15-minute user
+token locally. `aipg auth-status` checks that local session; `aipg logout`
+removes it. There is no refresh token; repeat login after expiry. A scoped
+`GRID_API_KEY` is the durable option for unattended local MCP and automation.
+Remote MCP at `https://api.aipowergrid.io/v1/mcp` requires browser OAuth and
+does not accept durable Grid keys. Never ask the human to paste tokens into chat.
 
 ## Endpoint map
 
@@ -51,10 +53,14 @@ device flow is live.
 |---------|------|
 | Generate an image | `POST /v1/images/generations` |
 | Generate a video | `POST /v1/videos/generations` |
+| Submit current LTX video with a spend ceiling | `POST /v1/videos/jobs` |
+| Recover a video by request key | `GET /v1/videos/jobs` with `Idempotency-Key` |
+| Read a video job | `GET /v1/videos/jobs/{job_id}` |
 | Generate audio or music | `POST /v1/audio/generations` |
 | Generate a 3D mesh (image→GLB) | `POST /v1/3d/generations` |
 | Chat / LLM completion | `POST /v1/chat/completions` |
 | List text models | `GET /v1/models` |
+| Inspect model controls and source formats | `GET /v1/models/{model_id}/params` |
 | List image/video models + live perf | `GET /v1/status/models` |
 | List curated styles | `GET /v1/styles` |
 | Poll generation progress | `GET /v1/progress/{token}` |
@@ -64,9 +70,10 @@ device flow is live.
 
 Current model names (change over time — verify with `/v1/status/models`):
 - **Image:** `Krea 2 Turbo` (fast ~8s), `z-image-turbo`, `FLUX.2 Klein 4B FP8`
-- **Video:** `LTX-2.3`
+- **Video:** discover current model names and source modes; `LTX-2.5 Distilled BF16`
+  uses the asynchronous job route, subject to Core admission.
 - **Audio:** discover the live ACE-Step model with `/v1/status/models`
-- **3D:** `TRELLIS2` (image→mesh)
+- **3D:** `TRELLIS2` is an HTTP capability; use it only when discovery shows a worker.
 - **Text:** `auto` (router), `gpt-oss-120b`, `gpt-oss-20b`, `deepseek-v4-flash-nvfp4`
 
 ---
@@ -172,36 +179,58 @@ model and params server-side (your explicit fields still win).
 
 ## Video
 
-Same shape as images, at `/v1/videos/generations`. Video is **slow** (tens of
-seconds) — either hold the connection, or poll with a `progress_token`.
+Discover the exact model and source modes before a request. Current LTX jobs
+use durable asynchronous submission. Quote the intended frame count, set a
+human-approved `max_cost_micro_usd`, and generate one unique UUIDv4 request key.
+The ceiling is enforced by Core; a quote alone does not reserve or limit spend.
+Inspect `/v1/models/{model_id}/params` (URL-encode the model name), or use
+`aipg_get_model_parameters`. The current distilled contract requires audio
+enabled, 24 FPS and eight steps; other model variants may differ.
 
-### Synchronous (blocks until done)
 ```bash
-curl -s --max-time 660 -X POST "$GRID_BASE_URL/v1/videos/generations" \
-  -H "apikey: $GRID_API_KEY" -H "Content-Type: application/json" \
-  -d '{"model":"LTX-2.3","prompt":"a slow pan over a neon city at night","seconds":4,"fps":24,"size":"768x512"}'
-# → {"data":[{"url":"https://media.aipg.art/video/<id>/0.mp4","seed":…}], "grid":{…}}
+curl --fail-with-body -s "$GRID_BASE_URL/v1/account/credits/quote" \
+  -H "Authorization: Bearer $GRID_API_KEY" -H "Content-Type: application/json" \
+  -d '{"model":"LTX-2.5 Distilled BF16","modality":"video","frames":97}'
+
+# The illustrative $0.10 ceiling below must fit the quote and approved budget.
+VIDEO_REQUEST_ID=$(python3 -c 'import uuid; print(uuid.uuid4())')
+curl --fail-with-body -s "$GRID_BASE_URL/v1/videos/jobs" \
+  -H "Authorization: Bearer $GRID_API_KEY" -H "Idempotency-Key: $VIDEO_REQUEST_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"LTX-2.5 Distilled BF16","prompt":"ocean waves at sunrise","frames":97,"max_cost_micro_usd":100000}'
+
+# Recover or poll the same request; no new job is submitted.
+curl --fail-with-body -s "$GRID_BASE_URL/v1/videos/jobs" \
+  -H "Authorization: Bearer $GRID_API_KEY" -H "Idempotency-Key: $VIDEO_REQUEST_ID"
 ```
 
-### With live progress (recommended for agents)
-```bash
-TOKEN="job-$(date +%s)"
-# fire the request in the background…
-curl -s -X POST "$GRID_BASE_URL/v1/videos/generations" \
-  -H "apikey: $GRID_API_KEY" -H "Content-Type: application/json" \
-  -d "{\"model\":\"LTX-2.3\",\"prompt\":\"ocean waves\",\"seconds\":4,\"progress_token\":\"$TOKEN\"}" > /tmp/vid.json &
-# …and poll the percentage
-while :; do
-  P=$(curl -s "$GRID_BASE_URL/v1/progress/$TOKEN" -H "apikey: $GRID_API_KEY")
-  echo "$P"; echo "$P" | grep -q '"done"' && break; sleep 3
-done
-cat /tmp/vid.json
-```
-Video params: `seconds` (1–10), `fps` (8–30), `size` (default `768x512`),
-`image` (img2video start frame), plus `style`, `seed`, `n` (1–2), `worker`.
+Retain the generated UUID for recovery. Poll at intervals of at least five
+seconds. `state: completed` contains the
+generation envelope at `result`, with links under `result.media[].url`.
+`closed_without_result` is terminal; `execution_uncertain` is not permission to
+submit a fresh job. After a timeout or lost response, recover using the same
+key. Never retry automatically with a new key. Core may restrict admission
+even while model discovery shows a worker.
 
-### img2video
-Pass a start frame as `image` (base64 / `data:` URI), same as img2img.
+Video controls include `frames` (9–337; recipe alignment applies), `seconds`
+(positive, at most 337/24), `fps` (8–30), `size`, seed, and model-supported
+conditioning. `image` pins a first frame. `keyframes` contains at most 16
+`{image, frame, strength}` entries; frame is 0–336 and strength is 0–1.
+Do not combine `image` and `keyframes`. References are `reference_audio`
+(WAV), `reference_video` (MP4), and `reference_image` (PNG appearance sheet).
+All are inline base64/data URIs. Core validates source dimensions, duration,
+recipe limits and allowed combinations; it does not accept arbitrary media URLs.
+
+The shared encoded-media budget is 64 MiB with a 64 KiB JSON envelope.
+Individual decoded references are limited to 12 MiB audio/image and 32 MiB
+video. Do not put inline media in shell arguments. CLI `--image-file`,
+`--reference-audio-file`, `--reference-video-file`, `--reference-image-file`
+and `--keyframes-file` load bounded local files.
+
+MCP `aipg_submit_video_job` and `aipg_get_video_job` expose submission and
+recovery. The synchronous `aipg_generate_video` tool remains available for
+models admitted by `/v1/videos/generations`; its progress token API is not the
+asynchronous job status API.
 
 ---
 
@@ -279,7 +308,7 @@ curl -s --max-time 1980 -X POST "$GRID_BASE_URL/v1/audio/generations" \
 # -> {"data":[{"url":"https://media.aipg.art/.../0.wav","seed":...}],"grid":{...}}
 ```
 
-For vocals, add `lyrics` and a two-letter `vocal_language`. Useful controls are
+For vocals, add `lyrics` and a lowercase two-letter `vocal_language`. Useful controls are
 `seconds` (10-300), `inference_steps`, `bpm`, `key_scale`, `time_signature`
 (`2/4`, `3/4`, `4/4`, or `6/8`), `vocal_language`, and `seed`. Generation can
 take longer than text; set a generous client timeout. Return and retain the
@@ -331,4 +360,5 @@ curl -s "$GRID_BASE_URL/v1/stats/totals" -H "apikey: $GRID_API_KEY"
   A displayed pocket can be preview-only while its rollout gate is off. A `402`
   means the request could not reserve enough currently spendable credit.
 - **Video takes real time.** Use `progress_token` + `/v1/progress/{token}` rather
-  than a long blocking curl in an interactive agent.
+  than a long blocking curl for legacy synchronous video. Current LTX uses the
+  asynchronous job/status flow above.

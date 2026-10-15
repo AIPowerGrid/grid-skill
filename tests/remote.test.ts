@@ -115,6 +115,22 @@ describe("remote Grid MCP server", () => {
     expect(running.introspectFetch).not.toHaveBeenCalled();
   });
 
+  it("accepts reference media larger than the old 256 KiB limit without exposing the service key", async () => {
+    const running = serverWith(introspection(), vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ data: [] }))));
+    const origin = await listen(running.server);
+    const client = new Client({ name: "remote-media-test", version: "1.0.0" });
+    clients.push(client);
+    await client.connect(new StreamableHTTPClientTransport(new URL(`${origin}/v1/mcp`), {
+      requestInit: { headers: { Authorization: `Bearer ${USER_TOKEN}` } },
+    }));
+    const image = `data:image/png;base64,${"YQ==".repeat(100_000)}`;
+    const result = await client.callTool({ name: "aipg_generate_image", arguments: { prompt: "edit source", image } });
+    expect(result.isError).not.toBe(true);
+    const body = JSON.parse(String(running.gridFetch.mock.calls[0]?.[1]?.body));
+    expect(body.image).toBe(image);
+    expect(JSON.stringify(running.gridFetch.mock.calls)).not.toContain(SERVICE_KEY);
+  });
+
   it("returns insufficient_scope when either required scope is absent", async () => {
     const running = serverWith(introspection("account.read"));
     const origin = await listen(running.server);
@@ -130,6 +146,38 @@ describe("remote Grid MCP server", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(response.headers.get("www-authenticate")).toContain("insufficient_scope");
     expect(response.headers.get("www-authenticate")).toContain("inference.submit");
+  });
+
+  it("bounds concurrent large requests while status reads remain available", async () => {
+    const completes: Array<(value: Response) => void> = [];
+    const gridFetch = vi.fn<typeof fetch>().mockImplementation(async () => new Promise<Response>((resolve) => completes.push(resolve)));
+    const running = serverWith(introspection(), gridFetch);
+    const origin = await listen(running.server);
+    const client = new Client({ name: "large-request-test", version: "1.0.0" });
+    clients.push(client);
+    await client.connect(new StreamableHTTPClientTransport(new URL(`${origin}/v1/mcp`), {
+      requestInit: { headers: { Authorization: `Bearer ${USER_TOKEN}` } },
+    }));
+    const args = { prompt: "edit", image: "YWFh".repeat(100_000) };
+    const first = client.callTool({ name: "aipg_generate_image", arguments: args });
+    const second = client.callTool({ name: "aipg_generate_image", arguments: args });
+    try {
+      await vi.waitFor(() => expect(completes).toHaveLength(2));
+      const rejected = await fetch(`${origin}/v1/mcp`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${USER_TOKEN}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 99, method: "tools/call", params: { name: "aipg_generate_image", arguments: args } }),
+      });
+      expect(rejected.status).toBe(429);
+      await expect(client.listTools()).resolves.toHaveProperty("tools");
+    } finally {
+      for (const done of completes) done(new Response(JSON.stringify({ data: [] })));
+      await Promise.allSettled([first, second]);
+    }
+    const third = client.callTool({ name: "aipg_generate_image", arguments: args });
+    await vi.waitFor(() => expect(completes).toHaveLength(3));
+    completes[2]!(new Response(JSON.stringify({ data: [] })));
+    await expect(third).resolves.not.toHaveProperty("isError", true);
   });
 
   it("rejects oversized bodies, hostile origins, and unrelated paths before MCP handling", async () => {

@@ -20,6 +20,9 @@ resource. These files are source artifacts, not proof that the service is live.
   or credential values.
 - `README.md` - staged rollout, verification, and rollback procedure.
 - `STATUS.md` - non-secret production rollout snapshot and remaining gates.
+- `REFRESH_EVIDENCE.md` - candidate media-refresh checks and explicit live,
+  release and worker-recovery work still outstanding. Never label candidate
+  stdio evidence as deployed remote-MCP evidence.
 
 ## Local Contracts
 
@@ -34,6 +37,9 @@ resource. These files are source artifacts, not proof that the service is live.
   `AIPG_MCP_CORE_INTERNAL_URL`. The internal URL is transport-only.
 - Preserve immediate SSE response mode, 15-second keepalives, disabled nginx
   buffering, and a proxy read deadline longer than the keepalive interval.
+- The nginx request limit is 67,174,400 bytes, matching the MCP reader and
+  Core's native video envelope. Keep it aligned on deployment; never deploy
+  the larger tool inputs with the old 256 KiB overlay.
 - Core introspection is loopback transport, not a public API. The Core Nginx
   site must shadow `/v1/oauth/introspect` with an exact external `404`; the MCP
   process calls Uvicorn directly through `AIPG_MCP_CORE_INTERNAL_URL`.

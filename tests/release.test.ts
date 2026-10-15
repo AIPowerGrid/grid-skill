@@ -21,7 +21,7 @@ describe("npm release contract", () => {
       "aipg-mcp-http": "dist/http.js",
     });
     expect(packageLock.packages[""].bin).toEqual(packageJson.bin);
-    expect(packageJson.dependencies["@modelcontextprotocol/node"]).toBe("2.0.0");
+    expect(packageJson.dependencies["@modelcontextprotocol/node"]).toBe("2.1.1");
     expect(workflow).toMatch(/tags:\s*\n\s+- "mcp-v\*\.\*\.\*"/);
     expect(workflow).toMatch(/expected="mcp-v\$\(node -p/);
     expect(workflow).toMatch(/fetch-depth: 0/);

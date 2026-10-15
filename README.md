@@ -73,7 +73,7 @@ aipg credits
 aipg quote --model "Krea 2 Turbo" --modality image
 aipg text --prompt "Explain Base in one sentence"
 aipg image --prompt "a solar-powered compute city at sunrise"
-aipg video --prompt "slow camera move through a neon server hall" --seconds 4
+aipg params --model "LTX-2.5 Distilled BF16"
 aipg audio --prompt "hopeful instrumental post-rock" --seconds 30
 ```
 
@@ -103,17 +103,61 @@ value. The server exposes:
 
 - `aipg_list_models`
 - `aipg_get_credits`
+- `aipg_get_model_parameters`
 - `aipg_quote`
 - `aipg_generate_text`
 - `aipg_generate_image`
 - `aipg_generate_video`
 - `aipg_generate_audio`
+- `aipg_submit_video_job`
+- `aipg_get_video_job`
 
-The discovery, credit, and quote tools are read-only. Every generation tool is
-marked as a paid, non-idempotent operation because it consumes Grid credits;
+The discovery, credit, quote, and video-status tools are read-only. Generation
+tools are marked as paid operations because they consume Grid credits;
 MCP clients can therefore require confirmation instead of treating inference
 like a harmless read. Agents should call `aipg_quote` first whenever the user
 has set a budget or has not already approved the spend.
+
+Image generation accepts an inline `image` for models advertising `img2img`,
+plus batch count, seed, model-gated steps/CFG/sampler, output format and an
+optional `max_cost_micro_usd` ceiling. CLI users can supply `--image-file photo.png`.
+Editing strength/denoise controls are supported only where the selected model
+allows them. Use `aipg_get_model_parameters` or `aipg params --model MODEL`
+before choosing advanced settings. For example, the current LTX distilled
+contract requires `audio: true`, 24 FPS and eight steps.
+
+For current LTX video models use `aipg_submit_video_job`, then
+`aipg_get_video_job`. Submission requires a unique `idempotency_key` and a
+positive `max_cost_micro_usd` ceiling (one dollar is 1,000,000 micro-USD).
+The request key must be a UUIDv4; generate it once per intended video.
+Retrying the same intent/key is idempotent. After a timeout, recover by key
+before another submission. A completed response contains media under
+`result.media`; MCP also returns those URLs as resource links. Poll no more
+often than every five seconds. Admission depends on Core's current policy.
+
+```bash
+aipg quote --model "LTX-2.5 Distilled BF16" --modality video --frames 97
+VIDEO_REQUEST_ID=$(node -e 'console.log(require("node:crypto").randomUUID())')
+aipg video-submit --prompt "a slow camera move through a forest" \
+  --model "LTX-2.5 Distilled BF16" --frames 97 \
+  --max-cost-micro-usd 100000 --idempotency-key "$VIDEO_REQUEST_ID"
+aipg video-status --idempotency-key "$VIDEO_REQUEST_ID"
+```
+
+The example ceiling is a limit, not a price or guarantee of admission. Choose
+it from the current quote and the human's approved budget.
+Video accepts up to 337 frames (recipe-specific alignment and FPS apply),
+timed keyframes, and reference audio, video or appearance images when the
+selected model supports them. Core checks source duration, dimensions, format,
+and allowed combinations. CLI file flags are `--image-file`,
+`--reference-audio-file` (WAV), `--reference-video-file` (MP4), and
+`--reference-image-file` (PNG). `--keyframes-file pins.json` reads an array
+such as `[{"image_file":"start.png","frame":0,"strength":1}]`; image paths
+are relative to that JSON file. Inline media must be base64/data URIs, not URLs.
+
+`aipg_generate_video` / `aipg video` retain the synchronous route for models
+Core allows there. Model discovery determines availability: an exposed tool
+does not mean an audio or video worker is currently online.
 
 ### Remote MCP
 
@@ -140,13 +184,17 @@ aipg-mcp-http
 ```
 
 The local `/healthz` response contains only `{"status":"ok"}`. Host and Origin guards,
-a 256 KiB request limit, bounded introspection responses, exact issuer/audience
+a 64 MiB encoded-media budget plus 64 KiB JSON envelope, bounded introspection responses, exact issuer/audience
 checks, strict scope enforcement, and fail-closed upstream errors are part of
 the server contract. Remote MCP responses use SSE with 15-second keepalives so
 long video and audio tools remain active through the public edge. The process
 uses the loopback Core URL only as a transport; OAuth issuer, audience,
 protected-resource metadata, and the public MCP resource remain pinned to
 `https://api.aipowergrid.io`.
+
+At most two requests larger than 256 KiB may remain in flight per process.
+Additional large uploads receive `429`; discovery and status reads remain
+available. Wait before retrying, and recover uncertain video submissions by key.
 
 This process configuration is for Grid operators, not MCP users. Do not run it
 with an ordinary Grid key. Provision `grid-mcp` with
@@ -173,7 +221,8 @@ surface. All three call the same public API and keep Core as the source of truth
 
 ## Package release status
 
-`@aipowergrid/mcp@0.2.0` is the current public release. Releases come
+`0.3.0` is the media-refresh candidate; `0.2.0` remains the published version
+until the matching release workflow succeeds. Releases come
 only from matching `mcp-vX.Y.Z` tags through GitHub Actions with npm provenance.
 The repository workflow is the package's npm Trusted Publisher; no long-lived
 npm publish token belongs in GitHub or on a developer workstation.
