@@ -41,14 +41,31 @@ tools. This does not imply that every modality has an online worker.
   probes were recovered as absent before correcting inputs; no duplicate
   accepted submission was made.
 
-## Remaining Verification
+## Music Recovery
 
-- Music is not live-verified. Gorgadon's audio service is running but Core
-  rejects its expired delegation. The existing certificate also names an older
-  payout address than the account's current configured address. A new request
-  must bind the same worker key/name to the current payout wallet and be signed
-  by that wallet before it is installed. Do not extend or bypass an expired
-  certificate or silently change account ownership/payout settings.
+- The owner reviewed and signed the exact worker-only delegation on their
+  connected Ledger. The signature was independently recovered to the expected
+  wallet before installation through the manager's supported identity command.
+  The certificate retains the existing worker key/name and has a 90-day term;
+  the expired certificate is preserved privately for incident review.
+- The browser's selected wallet was different from the account payout wallet.
+  Its replacement prompt was not approved. Direct Ledger signing avoided any
+  payout-account mutation, software-wallet import, private-key export or funds
+  transfer. No signature or private worker credential belongs in this evidence.
+- After restarting only `aipg-audio-worker@gorgadon.service`, public model
+  discovery advertised one `ace-step-v1.5-xl-turbo` audio worker.
+- A fresh fifteen-minute session with the same account.read and
+  inference.submit scopes called the deployed 0.3.0 remote MCP. A ten-second
+  generation quoted at $0.002 completed in 17.87 seconds wall time (12.36
+  seconds worker time) on `gorgadon-audio-3090`, returning a media resource link.
+  The quote is not a separately verified ledger debit. The combined bounded
+  canaries remain below the original $0.03 aggregate authorization.
+- The returned WAV is readable PCM signed 16-bit, stereo, 48 kHz and exactly
+  ten seconds, with mean volume -18.1 dB and peak -1.0 dB. This proves non-silent
+  output and encoding, not a subjective musical-quality rating.
+
+## Qualification Limits
+
 - Real timed-keyframe and reference-audio/video generations were not run in
   this bounded canary. Contract tests cover forwarding; model discovery remains
   authoritative for recipe-specific support. Do not claim these combinations

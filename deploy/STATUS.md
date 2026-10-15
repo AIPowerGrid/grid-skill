@@ -18,8 +18,11 @@ machine-checkable live verifier remains the authority for current health.
   reads, completed-video recovery, credits, quote, 20 same-token requests,
   immediate SSE headers, a tiny paid text call, and a 307,288-byte read-only
   request. Fresh npm stdio discovery/recovery and signatures also pass.
+- Gorgadon's audio worker is restored after an owner-approved Ledger
+  authorization renewal; payout settings and the worker key are unchanged.
+  Public audio discovery and a real ten-second remote MCP generation pass.
 - See [media refresh evidence](REFRESH_EVIDENCE.md) for the distinction between
-  real generation proof, contract-only controls and the pending music renewal.
+  real generation proof and contract-only controls.
 - Scoped MCP rollback: restore release
   `6e03fa95718d39b13b2da5623cb8803d220d334a`, restore proxy overlay from
   `/etc/nginx/aipg-api.d/mcp.conf.pre-0.3.0-20261015`, validate nginx, restart
