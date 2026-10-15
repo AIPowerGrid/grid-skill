@@ -221,8 +221,9 @@ surface. All three call the same public API and keep Core as the source of truth
 
 ## Package release status
 
-`0.3.0` is the media-refresh candidate; `0.2.0` remains the published version
-until the matching release workflow succeeds. Releases come
+`0.3.0` is published on npm and deployed to the remote MCP endpoint, with ten
+tools. See [deployment evidence](deploy/REFRESH_EVIDENCE.md) for the verified
+capabilities and the outstanding music-worker renewal. Releases come
 only from matching `mcp-vX.Y.Z` tags through GitHub Actions with npm provenance.
 The repository workflow is the package's npm Trusted Publisher; no long-lived
 npm publish token belongs in GitHub or on a developer workstation.
